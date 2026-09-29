@@ -29,15 +29,14 @@
     "zod": "^4.6.5"
   },
   "scripts": {
-    "dev": "tsx watch --env-file-if-exists=.env src/index.ts",
+    "dev": "prisma generate && tsx watch --env-file-if-exists=.env src/index.ts",
     "build": "prisma generate && tsup",
     "start": "node dist/index.js",
     "lint": "tsc --noEmit",
     "typecheck": "prisma generate && tsc --noEmit",
-    "test": "vitest run",
+    "test": "prisma generate && vitest run",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
-    "db:deploy": "prisma migrate deploy",
-    "postinstall": "prisma generate"
+    "db:deploy": "prisma migrate deploy"
   }
 }

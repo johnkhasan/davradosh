@@ -3,7 +3,9 @@
 
 FROM node:22-bookworm-slim AS base
 ENV PNPM_HOME=/pnpm PATH=/pnpm:$PATH CI=true
-RUN corepack enable
+# Prisma's schema engine (migrations) needs OpenSSL.
+RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates \
+ && rm -rf /var/lib/apt/lists/* && corepack enable
 WORKDIR /repo
 
 # ---- install + build --------------------------------------------------------
@@ -25,7 +27,9 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
 FROM node:22-bookworm-slim AS runtime
 ENV NODE_ENV=production PORT=4000 UPLOAD_DIR=/app/uploads
 WORKDIR /app
-RUN groupadd --system --gid 10001 app && useradd --system --uid 10001 --gid app --home /app app \
+RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates \
+ && rm -rf /var/lib/apt/lists/* \
+ && groupadd --gid 10001 app && useradd --uid 10001 --gid app --no-create-home --home-dir /app app \
  && mkdir -p /app/uploads && chown app:app /app/uploads
 COPY --from=build --chown=app:app /out /app
 USER app
