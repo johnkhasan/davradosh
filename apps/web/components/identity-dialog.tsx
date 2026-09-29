@@ -23,6 +23,9 @@ interface IdentityDialogProps {
   submitLabel?: string;
   onSubmit: (identity: Identity) => void;
   onCancel?: () => void;
+  /** Optional second way to continue (e.g. "just watch"), same validation as submit. */
+  secondaryLabel?: string;
+  onSecondary?: (identity: Identity) => void;
 }
 
 /** Username, colour and avatar picker. No account needed; saved in localStorage. */
@@ -33,6 +36,8 @@ export function IdentityDialog({
   submitLabel = "Davom etish",
   onSubmit,
   onCancel,
+  secondaryLabel,
+  onSecondary,
 }: IdentityDialogProps) {
   const nameId = useId();
   const [name, setName] = useState(() => initial?.name ?? "");
@@ -48,6 +53,12 @@ export function IdentityDialog({
     setTouched(true);
     if (!valid) return;
     onSubmit(saveIdentity({ name: clean, color, avatar }));
+  };
+
+  const secondary = () => {
+    setTouched(true);
+    if (!valid || !onSecondary) return;
+    onSecondary(saveIdentity({ name: clean, color, avatar }));
   };
 
   return (
@@ -162,6 +173,15 @@ export function IdentityDialog({
               className="rounded-control border border-border px-4 py-2.5 font-medium hover:bg-surface-muted"
             >
               Bekor qilish
+            </button>
+          )}
+          {onSecondary && (
+            <button
+              type="button"
+              onClick={secondary}
+              className="rounded-control border border-border px-4 py-2.5 font-medium hover:bg-surface-muted"
+            >
+              {secondaryLabel}
             </button>
           )}
           <button

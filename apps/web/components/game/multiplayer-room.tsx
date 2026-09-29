@@ -25,6 +25,7 @@ import { RoomController, type RoomError } from "@/lib/realtime/room-controller";
 import { VoiceController } from "@/lib/realtime/voice-controller";
 import { cn } from "@/lib/utils";
 import { CursorLayer } from "./cursor-layer";
+import { PeopleButton, PeoplePanel, ViewerBanner } from "./people-panel";
 import { Minimap } from "./minimap";
 import { ReactionBar, ReactionLayer } from "./reactions";
 import { AudioStartBanner, VideoBubbles, VoiceButtons, VoiceSettings } from "./voice";
@@ -41,6 +42,7 @@ import {
 export function MultiplayerRoom({ roomId }: { roomId: string }) {
   // Rendered client-only (see room-loader), so localStorage is available here.
   const [identity, setIdentity] = useState<Identity | null>(() => loadIdentity());
+  const [watchOnly, setWatchOnly] = useState(false);
 
   if (!identity) {
     return (
@@ -50,15 +52,36 @@ export function MultiplayerRoom({ roomId }: { roomId: string }) {
           description="Ismingiz va rangingizni tanlang. Boshqalar sizni kursoringizdan taniydi."
           submitLabel="Qo'shilish"
           onSubmit={setIdentity}
+          secondaryLabel="Faqat tomosha qilish"
+          onSecondary={(who) => {
+            setWatchOnly(true);
+            setIdentity(who);
+          }}
         />
       </div>
     );
   }
-  return <RoomScreen key={identity.clientId + identity.name} roomId={roomId} identity={identity} />;
+  return (
+    <RoomScreen
+      key={identity.clientId + identity.name}
+      roomId={roomId}
+      identity={identity}
+      watchOnly={watchOnly}
+    />
+  );
 }
 
-function RoomScreen({ roomId, identity }: { roomId: string; identity: Identity }) {
-  const [controller] = useState(() => new RoomController(roomId, identity));
+function RoomScreen({
+  roomId,
+  identity,
+  watchOnly,
+}: {
+  roomId: string;
+  identity: Identity;
+  watchOnly: boolean;
+}) {
+  const [controller] = useState(() => new RoomController(roomId, identity, watchOnly));
+  const [peopleOpen, setPeopleOpen] = useState(false);
   const snapshot = useSyncExternalStore(
     controller.subscribe,
     controller.getSnapshot,
@@ -144,10 +167,11 @@ function RoomScreen({ roomId, identity }: { roomId: string; identity: Identity }
   const { room, players, me, status, error, progress, completed, holding, notice, following } =
     snapshot;
   const followed = following ? players.find((p) => p.id === following) : undefined;
+  const isViewer = players.find((p) => p.id === me)?.role === "viewer";
+  const seatedPlayers = players.filter((p) => p.role === "player");
+  const viewerCount = players.length - seatedPlayers.length;
 
   if (status === "error" && error) return <RoomErrorScreen error={error} />;
-
-  const connectedPlayers = players.filter((p) => p.connected);
 
   return (
     <div className="fixed inset-0 flex flex-col overflow-hidden bg-background">
@@ -158,7 +182,7 @@ function RoomScreen({ roomId, identity }: { roomId: string; identity: Identity }
         {room && (
           <span className="hidden text-sm text-muted md:inline">
             {room.cols * room.rows} bo&apos;lak ·{" "}
-            <ElapsedTime since={room.createdAt} until={room.completedAt} />
+            <ElapsedTime since={room.startedAt} until={room.completedAt} />
           </span>
         )}
         <div className="order-last flex w-full justify-center sm:order-none sm:w-auto sm:flex-1">
@@ -166,7 +190,7 @@ function RoomScreen({ roomId, identity }: { roomId: string; identity: Identity }
         </div>
         <div className="ml-auto flex items-center gap-2">
           <PlayerStack
-            players={players}
+            players={seatedPlayers}
             me={me}
             holding={holding}
             following={following}
@@ -174,8 +198,14 @@ function RoomScreen({ roomId, identity }: { roomId: string; identity: Identity }
             speaking={voiceSnapshot.speaking}
           />
           <span className="text-sm text-muted tabular-nums" title="O'yinchilar">
-            {connectedPlayers.length}/{room?.maxPlayers ?? MAX_PLAYERS_PER_ROOM}
+            {seatedPlayers.filter((p) => p.connected).length}/
+            {room?.maxPlayers ?? MAX_PLAYERS_PER_ROOM}
           </span>
+          <PeopleButton
+            viewers={viewerCount}
+            open={peopleOpen}
+            onClick={() => setPeopleOpen((v) => !v)}
+          />
           <InviteButton />
         </div>
       </header>
@@ -193,6 +223,13 @@ function RoomScreen({ roomId, identity }: { roomId: string; identity: Identity }
         <VideoBubbles voice={voice} snapshot={voiceSnapshot} players={players} me={me} />
         <AudioStartBanner voice={voice} snapshot={voiceSnapshot} />
         <ReactionLayer controller={controller} players={players} />
+        {isViewer && room && !followed && (
+          <ViewerBanner
+            controller={controller}
+            seated={seatedPlayers.length}
+            maxPlayers={room.maxPlayers}
+          />
+        )}
 
         {followed && (
           <>
@@ -256,23 +293,28 @@ function RoomScreen({ roomId, identity }: { roomId: string; identity: Identity }
           >
             <Frame />
           </ToolButton>
-          <ToolButton
-            label="Bo'laklarni tartiblash (hamma uchun)"
-            onClick={() => controller.arrange()}
-          >
-            <LayoutGrid />
-          </ToolButton>
+          {!isViewer && (
+            <ToolButton
+              label="Bo'laklarni tartiblash (hamma uchun)"
+              onClick={() => controller.arrange()}
+            >
+              <LayoutGrid />
+            </ToolButton>
+          )}
           <ToolButton
             label={sound ? "Ovozni o'chirish" : "Ovozni yoqish"}
             onClick={() => setSound((v) => !v)}
           >
             {sound ? <Volume2 /> : <VolumeX />}
           </ToolButton>
-          <VoiceButtons
-            voice={voice}
-            snapshot={voiceSnapshot}
-            onOpenSettings={() => setVoiceSettings((v) => !v)}
-          />
+          {/* Viewers listen only: LiveKit does not let them publish. */}
+          {!isViewer && (
+            <VoiceButtons
+              voice={voice}
+              snapshot={voiceSnapshot}
+              onOpenSettings={() => setVoiceSettings((v) => !v)}
+            />
+          )}
         </nav>
 
         <div className="absolute right-3 bottom-3 flex items-center gap-1 rounded-card border border-border bg-surface/95 p-1.5 shadow-soft-md backdrop-blur">
@@ -330,6 +372,17 @@ function RoomScreen({ roomId, identity }: { roomId: string; identity: Identity }
           />
         )}
 
+        {peopleOpen && room && (
+          <PeoplePanel
+            controller={controller}
+            players={players}
+            me={me}
+            maxPlayers={room.maxPlayers}
+            following={following}
+            onClose={() => setPeopleOpen(false)}
+          />
+        )}
+
         <Notice notice={notice} />
 
         {completed && showCompleted && (
@@ -339,6 +392,7 @@ function RoomScreen({ roomId, identity }: { roomId: string; identity: Identity }
             players={players}
             pieces={progress.total}
             onClose={() => setShowCompleted(false)}
+            onRestart={controller.isHost ? () => void controller.restart() : undefined}
           />
         )}
       </div>
@@ -471,14 +525,18 @@ function CompletedDialog({
   players,
   pieces,
   onClose,
+  onRestart,
 }: {
   durationMs: number;
   stats: Record<string, { merges: number }>;
   players: PlayerDTO[];
   pieces: number;
   onClose: () => void;
+  /** Host only: play the same picture again. */
+  onRestart?: () => void;
 }) {
   const rows = players
+    .filter((player) => player.role === "player" || stats[player.id])
     .map((player) => ({ player, merges: stats[player.id]?.merges ?? 0 }))
     .sort((a, b) => b.merges - a.merges);
   const max = Math.max(1, ...rows.map((r) => r.merges));
@@ -527,12 +585,22 @@ function CompletedDialog({
           >
             Rasmni ko&apos;rish
           </button>
-          <Link
-            href="/"
-            className="flex-1 rounded-control bg-primary px-4 py-2.5 font-medium text-primary-foreground"
-          >
-            Yangi puzzle
-          </Link>
+          {onRestart ? (
+            <button
+              type="button"
+              onClick={onRestart}
+              className="flex-1 rounded-control bg-primary px-4 py-2.5 font-medium text-primary-foreground"
+            >
+              Yana o&apos;ynash
+            </button>
+          ) : (
+            <Link
+              href="/"
+              className="flex-1 rounded-control bg-primary px-4 py-2.5 font-medium text-primary-foreground"
+            >
+              Yangi puzzle
+            </Link>
+          )}
         </div>
       </div>
     </div>
@@ -542,8 +610,8 @@ function CompletedDialog({
 const ERRORS: Record<RoomError, { emoji: string; title: string; text: string }> = {
   full: {
     emoji: "🙈",
-    title: "Room to'la",
-    text: `Bu puzzle'ni hozir ${MAX_PLAYERS_PER_ROOM} kishi yig'yapti. Birozdan keyin qayta urinib ko'ring yoki o'z puzzle'ingizni yarating.`,
+    title: "Xona to'la",
+    text: "O'yinchilar ham, tomoshabinlar ham to'la. Birozdan keyin qayta urinib ko'ring yoki o'z puzzle'ingizni yarating.",
   },
   not_found: {
     emoji: "🔍",
@@ -554,6 +622,16 @@ const ERRORS: Record<RoomError, { emoji: string; title: string; text: string }> 
     emoji: "⚠️",
     title: "Qo'shilib bo'lmadi",
     text: "Ism yoki havola noto'g'ri ko'rinishda. Sahifani yangilab qayta urinib ko'ring.",
+  },
+  banned: {
+    emoji: "🚫",
+    title: "Kirish taqiqlangan",
+    text: "Bu puzzle'ning egasi sizni xonadan chiqarib yuborgan. Boshqa puzzle'ga qo'shiling yoki o'zingiznikini yarating.",
+  },
+  removed: {
+    emoji: "👋",
+    title: "Siz xonadan chiqarildingiz",
+    text: "Puzzle egasi sizni bu xonadan chiqardi. Havola orqali qayta kirishingiz mumkin (agar bloklanmagan bo'lsangiz).",
   },
   kicked: {
     emoji: "🪟",

@@ -3,7 +3,9 @@ import {
   PuzzleState,
   type ClientToServerEvents,
   type JoinError,
+  type ActionAck,
   type PlayerDTO,
+  type PlayerRole,
   type PlayerStatsDTO,
   type ReactionEmoji,
   type RemoteSnap,
@@ -23,7 +25,7 @@ import type { Identity } from "../identity";
 type GameSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
 export type RoomStatus = "connecting" | "loading" | "ready" | "reconnecting" | "error";
-export type RoomError = JoinError | "kicked" | "connection" | "image";
+export type RoomError = JoinError | "kicked" | "removed" | "connection" | "image";
 
 export interface RoomSnapshot {
   status: RoomStatus;
@@ -102,6 +104,8 @@ export class RoomController {
   constructor(
     private readonly roomId: string,
     private readonly identity: Identity,
+    /** Join as a viewer on purpose ("just watch"). */
+    private readonly watchOnly = false,
   ) {
     this.snapshot = {
       status: "connecting",
@@ -154,9 +158,14 @@ export class RoomController {
     socket.on("connect_error", () => {
       if (this.snapshot.status === "connecting") this.update({ status: "reconnecting" });
     });
-    socket.on("kicked", () => {
-      this.update({ status: "error", error: "kicked" });
+    socket.on("kicked", (reason) => {
+      this.update({ status: "error", error: reason === "host" ? "removed" : "kicked" });
       socket.disconnect();
+    });
+    socket.on("puzzle:reset", () => {
+      this.update({ completed: null });
+      this.notify("Host puzzle'ni qaytadan boshladi");
+      void this.resync();
     });
 
     socket.on("player:joined", (player) => {
@@ -165,6 +174,17 @@ export class RoomController {
       this.sendViewport(true);
     });
     socket.on("player:updated", (player) => {
+      const before = this.playerById(player.id)?.role;
+      if (player.id === this.snapshot.me && before && before !== player.role) {
+        if (player.role === "viewer") {
+          const dragging = this.view?.draggingGroupId;
+          if (dragging !== null && dragging !== undefined) this.view?.cancelDrag(dragging);
+          this.stopHoldHeartbeat();
+          this.notify("Endi siz tomoshabinsiz");
+        } else {
+          this.notify("Endi siz o'yinchisiz, bo'laklarni ushlashingiz mumkin 🧩");
+        }
+      }
       this.upsertPlayer(player);
       if (!player.connected) {
         this.cursors.delete(player.id);
@@ -247,7 +267,68 @@ export class RoomController {
   }
 
   arrange() {
+    if (this.myRole !== "player") return;
     this.socket?.emit("puzzle:arrange");
+  }
+
+  get myRole(): PlayerRole | null {
+    return this.playerById(this.snapshot.me)?.role ?? null;
+  }
+
+  get isHost(): boolean {
+    return this.playerById(this.snapshot.me)?.isHost ?? false;
+  }
+
+  get hasFreeSeat(): boolean {
+    const seated = this.snapshot.players.filter((p) => p.role === "player").length;
+    return seated < (this.snapshot.room?.maxPlayers ?? 0);
+  }
+
+  private async action(
+    send: () => Promise<ActionAck> | undefined,
+    failure: string,
+  ): Promise<boolean> {
+    const result = await send()?.catch(() => null);
+    if (result?.ok) return true;
+    const reason =
+      result && !result.ok
+        ? {
+            not_host: "Buni faqat host qila oladi",
+            full: "Bo'sh joy yo'q",
+            not_found: "O'yinchi topilmadi",
+            invalid: failure,
+          }[result.error]
+        : failure;
+    this.notify(reason);
+    return false;
+  }
+
+  /** Viewer → player when a seat is free. */
+  claimSeat() {
+    return this.action(() => this.socket?.emitWithAck("seat:claim"), "Joy olib bo'lmadi");
+  }
+
+  /** Player → viewer, freeing the seat. */
+  leaveSeat() {
+    return this.action(() => this.socket?.emitWithAck("seat:leave"), "Bajarib bo'lmadi");
+  }
+
+  kick(playerId: string, ban: boolean) {
+    return this.action(
+      () => this.socket?.emitWithAck("host:kick", { playerId, ban }),
+      "Chiqarib bo'lmadi",
+    );
+  }
+
+  setRole(playerId: string, role: PlayerRole) {
+    return this.action(
+      () => this.socket?.emitWithAck("host:set-role", { playerId, role }),
+      "Bajarib bo'lmadi",
+    );
+  }
+
+  restart() {
+    return this.action(() => this.socket?.emitWithAck("host:restart"), "Qaytadan boshlab bo'lmadi");
   }
 
   /** Sends a floating emoji from our cursor (or the middle of our view). */
@@ -310,6 +391,7 @@ export class RoomController {
       name: this.identity.name,
       color: this.identity.color,
       avatar: this.identity.avatar,
+      role: this.watchOnly ? "viewer" : "player",
     });
     if (this.destroyed || socket !== this.socket) return;
     if (!ack.ok) {
@@ -365,7 +447,7 @@ export class RoomController {
       status: this.view ? "ready" : "loading",
       completed:
         dto.room.status === "COMPLETED" && dto.room.completedAt
-          ? { durationMs: dto.room.completedAt - dto.room.createdAt, stats: dto.stats }
+          ? { durationMs: dto.room.completedAt - dto.room.startedAt, stats: dto.stats }
           : null,
     });
 
@@ -432,6 +514,14 @@ export class RoomController {
   // ---------------------------------------------------------------- local input
 
   private onLocalGrab(groupId: number): boolean {
+    if (this.myRole !== "player") {
+      this.notify(
+        this.hasFreeSeat
+          ? "Bo'laklarni ushlash uchun «O'yinchi bo'lish» ni bosing"
+          : "Siz tomoshabinsiz: joy bo'shashini kuting",
+      );
+      return false;
+    }
     const holder = this.locks.get(groupId);
     if (holder && holder !== this.snapshot.me) {
       const name = this.playerById(holder)?.name ?? "Boshqa o'yinchi";
@@ -515,6 +605,8 @@ export class RoomController {
 
   private onLocalPointer(x: number, y: number) {
     this.lastPointer = { x, y };
+    // Viewers watch quietly (the server would drop their cursor anyway).
+    if (this.myRole !== "player") return;
     const now = performance.now();
     if (now - this.lastCursorSent < CURSOR_SEND_INTERVAL_MS) return;
     this.lastCursorSent = now;
