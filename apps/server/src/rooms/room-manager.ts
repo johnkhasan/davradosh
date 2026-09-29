@@ -2,8 +2,8 @@ import { randomInt } from "node:crypto";
 import { gridForPieceCount, PuzzleState, ROOM_TTL_MS, type CreateRoomSchema } from "@puzzle/shared";
 import type { FastifyBaseLogger } from "fastify";
 import type { z } from "zod";
-import { randomId } from "../lib/ids";
-import type { RoomRepository } from "./repository";
+import { randomCode, randomId } from "../lib/ids";
+import { RoomCodeTakenError, type RoomRepository } from "./repository";
 import { Room, type RoomEmitter } from "./room";
 
 export interface RoomManagerOptions {
@@ -67,7 +67,7 @@ export class RoomManager {
       { cols, rows, pieceWidth: image.width / cols, pieceHeight: image.height / rows },
       seed,
     );
-    const record = await this.opts.repository.createRoom({
+    const room = {
       id: randomId(8),
       hostId: input.clientId,
       imageId: image.id,
@@ -78,8 +78,23 @@ export class RoomManager {
       maxPlayers: Math.min(input.maxPlayers, this.opts.maxPlayersPerRoom),
       state: puzzle.snapshot(),
       expiresAt: new Date(Date.now() + ROOM_TTL_MS),
-    });
-    return record;
+    };
+    // Only 10 000 codes exist: after a few collisions the room goes without one (link only).
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const code = randomCode();
+      try {
+        return await this.opts.repository.createRoom({ ...room, code });
+      } catch (error) {
+        if (!(error instanceof RoomCodeTakenError)) throw error;
+      }
+    }
+    this.opts.logger.warn("no free room code, creating a room without one");
+    return this.opts.repository.createRoom({ ...room, code: null });
+  }
+
+  /** Room id for a 4-digit join code. */
+  findByCode(code: string): Promise<string | null> {
+    return this.opts.repository.findRoomIdByCode(code, new Date());
   }
 
   /** Returns the in-memory room, loading it from storage on first access. */

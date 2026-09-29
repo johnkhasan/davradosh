@@ -2,6 +2,8 @@ import type { ImageDTO, PlayerStatsDTO, PuzzleSnapshot } from "@puzzle/shared";
 
 export interface RoomRecord {
   id: string;
+  /** 4-digit code for joining without the link; null when none was free. */
+  code: string | null;
   hostId: string;
   /** Public id of the current host, when it is no longer the creator. */
   hostPlayerId: string | null;
@@ -58,8 +60,17 @@ export interface RoomRepository {
   createImage(image: NewImage): Promise<ImageDTO>;
   createRoom(room: NewRoom): Promise<RoomRecord>;
   loadRoom(id: string): Promise<RoomRecord | null>;
+  /** Id of the unexpired room with this join code. */
+  findRoomIdByCode(code: string, now: Date): Promise<string | null>;
   saveRoomState(id: string, update: RoomStateUpdate): Promise<void>;
   deleteExpiredRooms(now: Date): Promise<number>;
+}
+
+/** Thrown by createRoom when the join code already belongs to another room. */
+export class RoomCodeTakenError extends Error {
+  constructor(readonly code: string) {
+    super(`Room code ${code} is taken`);
+  }
 }
 
 /** Built-in image generated in the browser; lets rooms work before uploads exist. */

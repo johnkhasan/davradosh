@@ -15,6 +15,8 @@ enum RoomStatus {
 model Room {
   /// nanoid(8), used in the share link: /room/{id}
   id           String     @id
+  /// 4-digit join code, unique among stored rooms; null when none was free
+  code         String?    @unique
   /// clientId of the player who created the room
   hostId       String
   /// Public id of the current host when it moved away from the creator

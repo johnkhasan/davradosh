@@ -1,6 +1,7 @@
 import type { ImageDTO } from "@puzzle/shared";
 import {
   DEMO_IMAGE,
+  RoomCodeTakenError,
   type NewImage,
   type NewRoom,
   type RoomRecord,
@@ -30,6 +31,14 @@ export class MemoryRoomRepository implements RoomRepository {
   async createRoom(room: NewRoom): Promise<RoomRecord> {
     const image = this.images.get(room.imageId);
     if (!image) throw new Error(`Unknown image ${room.imageId}`);
+    if (room.code) {
+      for (const other of this.rooms.values()) {
+        if (other.code !== room.code) continue;
+        // An expired room gives its code up, like the Prisma repository does.
+        if (other.expiresAt > new Date()) throw new RoomCodeTakenError(room.code);
+        other.code = null;
+      }
+    }
     const { imageId: _imageId, ...rest } = room;
     const record: RoomRecord = {
       ...rest,
@@ -49,6 +58,12 @@ export class MemoryRoomRepository implements RoomRepository {
   async loadRoom(id: string) {
     const room = this.rooms.get(id);
     return room ? structuredClone(room) : null;
+  }
+
+  async findRoomIdByCode(code: string, now: Date) {
+    for (const room of this.rooms.values())
+      if (room.code === code && room.expiresAt > now) return room.id;
+    return null;
   }
 
   async saveRoomState(id: string, update: RoomStateUpdate) {

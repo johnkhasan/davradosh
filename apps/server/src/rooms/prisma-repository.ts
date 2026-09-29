@@ -1,8 +1,9 @@
 import type { ImageDTO, PlayerStatsDTO, PuzzleSnapshot } from "@puzzle/shared";
 import type { Db } from "../db";
-import type { Prisma } from "../generated/prisma/client";
+import { Prisma } from "../generated/prisma/client";
 import {
   DEMO_IMAGE,
+  RoomCodeTakenError,
   type NewImage,
   type NewRoom,
   type RoomRecord,
@@ -60,9 +61,30 @@ export class PrismaRoomRepository implements RoomRepository {
   }
 
   async createRoom(room: NewRoom): Promise<RoomRecord> {
+    // Expired rooms waiting for the hourly cleanup give their code up.
+    if (room.code)
+      await this.db.room.updateMany({
+        where: { code: room.code, expiresAt: { lte: new Date() } },
+        data: { code: null },
+      });
+    try {
+      return await this.insertRoom(room);
+    } catch (error) {
+      if (
+        room.code &&
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      )
+        throw new RoomCodeTakenError(room.code);
+      throw error;
+    }
+  }
+
+  private async insertRoom(room: NewRoom): Promise<RoomRecord> {
     const row = await this.db.room.create({
       data: {
         id: room.id,
+        code: room.code,
         hostId: room.hostId,
         imageId: room.imageId,
         cols: room.cols,
@@ -82,6 +104,14 @@ export class PrismaRoomRepository implements RoomRepository {
   async loadRoom(id: string) {
     const row = await this.db.room.findUnique({ where: { id }, include: { image: true } });
     return row ? this.toRecord(row) : null;
+  }
+
+  async findRoomIdByCode(code: string, now: Date) {
+    const row = await this.db.room.findFirst({
+      where: { code, expiresAt: { gt: now } },
+      select: { id: true },
+    });
+    return row?.id ?? null;
   }
 
   async saveRoomState(id: string, update: RoomStateUpdate) {
@@ -106,6 +136,7 @@ export class PrismaRoomRepository implements RoomRepository {
 
   private toRecord(row: {
     id: string;
+    code: string | null;
     hostId: string;
     image: ImageRow;
     cols: number;

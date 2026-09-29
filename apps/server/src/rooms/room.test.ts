@@ -29,6 +29,7 @@ function spyEmitter() {
 function record(overrides: Partial<RoomRecord> = {}): RoomRecord {
   return {
     id: "room1234",
+    code: "1234",
     hostId: "host_client",
     image: DEMO_IMAGE,
     cols: 4,

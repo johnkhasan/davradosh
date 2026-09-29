@@ -51,6 +51,8 @@ export const ColorSchema = z.enum(PLAYER_COLORS);
 export const AvatarSchema = z.string().min(1).max(16);
 export const ClientIdSchema = z.string().regex(/^[A-Za-z0-9_-]{8,64}$/);
 export const RoomIdSchema = z.string().regex(/^[A-Za-z0-9_-]{6,16}$/);
+/** 4-digit code that joins a room without the link. */
+export const RoomCodeSchema = z.string().regex(/^\d{4}$/);
 
 const Coordinate = z.number().finite().min(-1_000_000).max(1_000_000);
 const GroupId = z.number().int().min(0).max(100_000);
@@ -149,6 +151,8 @@ export interface ImageDTO {
 
 export interface RoomInfoDTO {
   id: string;
+  /** 4-digit join code; null for rooms created before codes existed or when none was free. */
+  code: string | null;
   cols: number;
   rows: number;
   seed: number;

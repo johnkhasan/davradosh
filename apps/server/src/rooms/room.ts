@@ -92,6 +92,7 @@ export class Room {
     this.hostId = record.hostId;
     this.info = {
       id: record.id,
+      code: record.code,
       cols: record.cols,
       rows: record.rows,
       seed: record.seed,

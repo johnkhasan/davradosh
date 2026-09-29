@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomInt } from "node:crypto";
 
 const ALPHABET = "0123456789abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ";
 
@@ -12,6 +12,11 @@ export function randomId(length = 8): string {
     if (byte < 256 - (256 % ALPHABET.length)) id += ALPHABET[byte % ALPHABET.length];
   }
   return id.length === length ? id : randomId(length);
+}
+
+/** 4-digit room join code, "0000".."9999". */
+export function randomCode(): string {
+  return randomInt(0, 10_000).toString().padStart(4, "0");
 }
 
 /**

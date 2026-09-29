@@ -241,6 +241,7 @@ function RoomScreen({
               setPeopleOpen((v) => !v);
             }}
           />
+          {room?.code && <RoomCodeButton code={room.code} />}
           <InviteButton />
         </div>
       </header>
@@ -528,6 +529,36 @@ function PlayerStack({
         </li>
       ))}
     </ul>
+  );
+}
+
+/** The 4-digit code friends can type on the home page instead of opening the link. */
+function RoomCodeButton({ code }: { code: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1800);
+    } catch {
+      // Clipboard blocked; the code is visible anyway.
+    }
+  };
+  return (
+    <button
+      type="button"
+      onClick={() => void copy()}
+      title="Xona kodi: bosh sahifada shu kodni kiritib qo'shilish mumkin"
+      aria-label={copied ? "Kod nusxalandi" : `Xona kodi ${code}, nusxalash`}
+      className="flex items-center gap-1 rounded-control border border-border bg-surface px-2.5 py-2 font-mono text-sm font-semibold tracking-widest tabular-nums shadow-soft-sm transition-colors hover:bg-surface-muted focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+    >
+      {copied ? (
+        <Check className="size-4 text-success" aria-hidden />
+      ) : (
+        <span className="text-muted">#</span>
+      )}
+      {code}
+    </button>
   );
 }
 

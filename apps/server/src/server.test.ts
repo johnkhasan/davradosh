@@ -116,6 +116,15 @@ describe("game server over Socket.IO", () => {
     expect((await fetch(`${url}/api/rooms/nope1234`)).status).toBe(404);
   });
 
+  it("finds a room by its 4-digit code", async () => {
+    const id = await createRoom();
+    const { code } = (await (await fetch(`${url}/api/rooms/${id}`)).json()) as { code: string };
+    expect(code).toMatch(/^\d{4}$/);
+    const res = await fetch(`${url}/api/rooms/code/${code}`);
+    expect(await res.json()).toEqual({ id });
+    expect((await fetch(`${url}/api/rooms/code/12a4`)).status).toBe(404);
+  });
+
   it("rejects invalid room creation", async () => {
     const res = await fetch(`${url}/api/rooms`, {
       method: "POST",

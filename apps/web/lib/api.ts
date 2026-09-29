@@ -3,6 +3,7 @@ import { API_URL } from "./env";
 
 export interface RoomPreview {
   id: string;
+  code: string | null;
   pieces: number;
   image: ImageDTO;
   status: "PLAYING" | "COMPLETED";
@@ -41,8 +42,13 @@ export interface GalleryItem {
 
 export const api = {
   createRoom: (input: CreateRoomInput) =>
-    request<{ id: string }>("/api/rooms", { method: "POST", body: JSON.stringify(input) }),
+    request<{ id: string; code: string | null }>("/api/rooms", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
   getRoom: (id: string) => request<RoomPreview>(`/api/rooms/${encodeURIComponent(id)}`),
+  findRoomByCode: (code: string) =>
+    request<{ id: string }>(`/api/rooms/code/${encodeURIComponent(code)}`),
   gallery: (category?: string) =>
     request<{ categories: string[]; items: GalleryItem[] }>(
       `/api/gallery${category ? `?category=${encodeURIComponent(category)}` : ""}`,

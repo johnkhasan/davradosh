@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { createDb } from "../db";
 import { PrismaRoomRepository } from "./prisma-repository";
+import { RoomCodeTakenError, type NewRoom } from "./repository";
 
 /**
  * Runs against a real PostgreSQL with migrations applied:
@@ -38,6 +39,7 @@ describe.skipIf(!url)("PrismaRoomRepository", () => {
     const state = { groups: [{ id: 0, x: 1, y: 2, pieceIds: [0], placed: false }] };
     const created = await repo.createRoom({
       id: `t${suffix}a`,
+      code: null,
       hostId: "host_client_1",
       imageId: image.id,
       cols: 1,
@@ -72,6 +74,7 @@ describe.skipIf(!url)("PrismaRoomRepository", () => {
   it("deletes expired rooms", async () => {
     await repo.createRoom({
       id: `t${suffix}b`,
+      code: null,
       hostId: "host_client_1",
       imageId: "demo",
       cols: 2,
@@ -84,5 +87,35 @@ describe.skipIf(!url)("PrismaRoomRepository", () => {
     });
     expect(await repo.deleteExpiredRooms(new Date())).toBeGreaterThanOrEqual(1);
     expect(await repo.loadRoom(`t${suffix}b`)).toBeNull();
+  });
+
+  it("finds rooms by join code and keeps codes unique", async () => {
+    const room = (id: string, code: string, expiresIn: number): NewRoom => ({
+      id,
+      code,
+      hostId: "host_client_1",
+      imageId: "demo",
+      cols: 2,
+      rows: 2,
+      seed: 1,
+      rotation: false,
+      maxPlayers: 5,
+      state: { groups: [] },
+      expiresAt: new Date(Date.now() + expiresIn),
+    });
+    // A code no stored room uses yet.
+    let code = "";
+    for (let n = 0; n < 10_000 && !code; n++) {
+      const candidate = n.toString().padStart(4, "0");
+      if (!(await db.room.findUnique({ where: { code: candidate } }))) code = candidate;
+    }
+    await repo.createRoom(room(`t${suffix}c`, code, -1000));
+    // The expired room gives the code up.
+    expect(await repo.findRoomIdByCode(code, new Date())).toBeNull();
+    await repo.createRoom(room(`t${suffix}d`, code, 60_000));
+    expect(await repo.findRoomIdByCode(code, new Date())).toBe(`t${suffix}d`);
+    await expect(repo.createRoom(room(`t${suffix}e`, code, 60_000))).rejects.toBeInstanceOf(
+      RoomCodeTakenError,
+    );
   });
 });
