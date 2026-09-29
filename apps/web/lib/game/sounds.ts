@@ -62,6 +62,11 @@ export const sounds = {
     tone(988, 0.22, "triangle", 0.07);
     setTimeout(() => tone(740, 0.3, "triangle", 0.06), 160);
   },
+  /** Someone left the room: the doorbell in reverse, lower and quieter. */
+  leave() {
+    tone(740, 0.2, "triangle", 0.05);
+    setTimeout(() => tone(554, 0.32, "triangle", 0.045), 150);
+  },
   complete() {
     [523, 659, 784, 1047].forEach((f, i) =>
       setTimeout(() => tone(f, 0.35, "triangle", 0.09), i * 110),

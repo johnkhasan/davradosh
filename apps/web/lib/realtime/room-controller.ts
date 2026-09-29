@@ -176,9 +176,10 @@ export class RoomController {
     });
     socket.on("player:updated", (player) => {
       const previous = this.playerById(player.id);
-      // A disconnected player coming back counts as joining again.
-      if (player.id !== this.snapshot.me && previous && !previous.connected && player.connected) {
-        sounds.join();
+      // Connection changes of other players: coming back sounds "join", dropping out "leave".
+      if (player.id !== this.snapshot.me && previous && previous.connected !== player.connected) {
+        if (player.connected) sounds.join();
+        else sounds.leave();
       }
       const before = previous?.role;
       if (player.id === this.snapshot.me && before && before !== player.role) {
@@ -198,6 +199,8 @@ export class RoomController {
       }
     });
     socket.on("player:left", (playerId) => {
+      // Players who disconnected already sounded "leave"; this is their seat being freed.
+      if (this.playerById(playerId)?.connected && playerId !== this.snapshot.me) sounds.leave();
       this.cursors.delete(playerId);
       this.viewports.delete(playerId);
       if (this.snapshot.following === playerId) this.update({ following: null });
