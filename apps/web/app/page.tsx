@@ -35,32 +35,32 @@ const FEATURES = [
   {
     icon: MousePointer2,
     title: "Jonli kursorlar",
-    text: "Har kimning kursori ismi va rangi bilan, xuddi Figmadagidek.",
+    text: "Har bir ishtirokchining kursori ismi va rangi bilan ekranda ko'rinib turadi.",
   },
   {
     icon: Users,
     title: `${MAX_PLAYERS_PER_ROOM} kishigacha`,
-    text: "Kichik davra uchun ideal: oila, do'stlar yoki hamkasblar.",
+    text: "Oila, do'stlar yoki hamkasblar bilan birga yig'ish uchun ayni muddao.",
   },
   {
     icon: Sparkles,
     title: "24 dan 500 gacha bo'lak",
-    text: "Tezkor 5 daqiqalik o'yindan butun kechalik sarguzashtgacha.",
+    text: "5 daqiqalik tezkor o'yindan tortib butun oqshomlik sarguzashtgacha.",
   },
   {
     icon: UserRoundCheck,
     title: "Ro'yxatdan o'tmasdan",
-    text: "Ism va rang tanlaysiz, xolos. Hech qanday parol yoki email yo'q.",
+    text: "Ism va rang tanlang, bo'ldi. Parol ham, email ham kerak emas.",
   },
   {
     icon: Smartphone,
     title: "Telefon va kompyuterda",
-    text: "Sichqoncha, trackpad yoki barmoq bilan: hammasi qulay.",
+    text: "Sichqoncha, trackpad yoki barmoq bilan birdek qulay o'ynaysiz.",
   },
   {
     icon: Link2,
     title: "7 kun saqlanadi",
-    text: "Bugun tugatolmadingizmi? Ertaga shu havola orqali davom eting.",
+    text: "Bugun tugata olmadingizmi? Ertaga xuddi shu havola orqali davom ettiring.",
   },
 ] as const;
 
