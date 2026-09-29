@@ -110,3 +110,32 @@ describe("PuzzleState.arrange", () => {
     expect(moved.slice(-2).sort()).toEqual([5, 6]);
   });
 });
+
+describe("PuzzleState.snap with canMerge", () => {
+  it("skips neighbours that may not be merged (held by another player)", () => {
+    const state = blank();
+    state.moveGroup(0, 2000, 2000);
+    state.moveGroup(1, 2003, 2002);
+    expect(state.snap(1, (id) => id !== 0)).toBeNull();
+    expect(state.groupCount).toBe(12);
+  });
+});
+
+describe("PuzzleState.applySnap", () => {
+  it("replays a snap computed on another machine", () => {
+    const server = blank();
+    const client = blank();
+    server.moveGroup(0, 2000, 2000);
+    client.moveGroup(0, 2000, 2000);
+    server.moveGroup(1, 2005, 2005);
+    const result = server.snap(1)!;
+    expect(client.applySnap(result)).toBe(true);
+    expect(client.snapshot()).toEqual(server.snapshot());
+  });
+
+  it("reports divergence when a group is missing", () => {
+    const client = blank();
+    expect(client.applySnap({ groupId: 99, absorbed: [], x: 0, y: 0, placed: false })).toBe(false);
+    expect(client.applySnap({ groupId: 0, absorbed: [42], x: 0, y: 0, placed: false })).toBe(false);
+  });
+});

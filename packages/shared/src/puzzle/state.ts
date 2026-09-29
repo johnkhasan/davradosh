@@ -124,7 +124,7 @@ export class PuzzleState {
    * Called when a group is dropped. Merges it with every correctly aligned
    * neighbour and snaps it into the board when close enough.
    */
-  snap(id: number): SnapResult | null {
+  snap(id: number, canMerge: (groupId: number) => boolean = () => true): SnapResult | null {
     let current = this.groups.get(id);
     if (!current) return null;
 
@@ -140,6 +140,7 @@ export class PuzzleState {
 
       for (const neighbourId of this.neighbourGroups(current)) {
         const neighbour = this.groups.get(neighbourId)!;
+        if (!canMerge(neighbourId)) continue;
         if (
           Math.abs(neighbour.x - current.x) > tolerance ||
           Math.abs(neighbour.y - current.y) > tolerance
@@ -180,11 +181,46 @@ export class PuzzleState {
   }
 
   /**
+   * Applies a snap computed elsewhere (by the server for another player's drop).
+   * Returns false when the local state has diverged and needs a full resync.
+   */
+  applySnap(result: SnapResult): boolean {
+    let survivor = this.groups.get(result.groupId);
+    if (!survivor) {
+      // The survivor may be a group that was absorbed locally by a prediction.
+      return false;
+    }
+    for (const absorbedId of result.absorbed) {
+      const absorbed = this.groups.get(absorbedId);
+      if (!absorbed) return false;
+      this.merge(survivor, absorbed);
+    }
+    survivor = this.groups.get(result.groupId)!;
+    survivor.x = result.x;
+    survivor.y = result.y;
+    survivor.placed = result.placed;
+    return true;
+  }
+
+  /** Moves a group even if placed (used when applying authoritative server state). */
+  setGroupPosition(id: number, x: number, y: number): boolean {
+    const group = this.groups.get(id);
+    if (!group) return false;
+    group.x = x;
+    group.y = y;
+    return true;
+  }
+
+  /**
    * Lays loose single pieces out tidily around the board. Edge pieces go
    * closest to the board when `edgesFirst` is set. Returns the moved group ids.
    */
-  arrange(options: { edgesFirst?: boolean; seed?: number } = {}): number[] {
-    const loose = [...this.groups.values()].filter((g) => !g.placed && g.pieceIds.length === 1);
+  arrange(
+    options: { edgesFirst?: boolean; seed?: number; exclude?: ReadonlySet<number> } = {},
+  ): number[] {
+    const loose = [...this.groups.values()].filter(
+      (g) => !g.placed && g.pieceIds.length === 1 && !options.exclude?.has(g.id),
+    );
     if (options.edgesFirst) {
       loose.sort(
         (a, b) =>

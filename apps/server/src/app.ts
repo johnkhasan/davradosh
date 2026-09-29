@@ -13,6 +13,7 @@ export async function buildApp({ env, checkDb }: AppDeps) {
     logger:
       env.NODE_ENV === "test" ? false : { level: env.NODE_ENV === "production" ? "info" : "debug" },
     trustProxy: true,
+    bodyLimit: 64 * 1024,
   });
 
   await app.register(cors, { origin: env.CORS_ORIGINS, credentials: true });

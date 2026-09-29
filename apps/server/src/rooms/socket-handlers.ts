@@ -1,0 +1,146 @@
+import {
+  CursorPayloadSchema,
+  DropPayloadSchema,
+  GrabPayloadSchema,
+  JoinPayloadSchema,
+  MovePayloadSchema,
+  type ClientToServerEvents,
+  type ServerToClientEvents,
+} from "@puzzle/shared";
+import type { FastifyBaseLogger } from "fastify";
+import type { Server, Socket } from "socket.io";
+import type { z } from "zod";
+import { TokenBucket } from "../lib/rate-limit";
+import type { RoomEmitter } from "./room";
+import type { RoomManager } from "./room-manager";
+
+interface SocketData {
+  roomId?: string;
+  playerId?: string;
+}
+
+export type GameServer = Server<
+  ClientToServerEvents,
+  ServerToClientEvents,
+  Record<string, never>,
+  SocketData
+>;
+type GameSocket = Socket<
+  ClientToServerEvents,
+  ServerToClientEvents,
+  Record<string, never>,
+  SocketData
+>;
+
+export const roomChannel = (roomId: string) => `room:${roomId}`;
+
+export function createRoomEmitter(io: GameServer, roomId: string): RoomEmitter {
+  const channel = roomChannel(roomId);
+  return {
+    all: (event, ...args) => io.to(channel).emit(event, ...args),
+    others: (socketId, volatile, event, ...args) => {
+      const target = io.to(channel).except(socketId);
+      (volatile ? target.volatile : target).emit(event, ...args);
+    },
+    one: (socketId, event, ...args) => io.to(socketId).emit(event, ...args),
+  };
+}
+
+/** Wires validated, rate-limited socket events to rooms. */
+export function registerSocketHandlers(
+  io: GameServer,
+  manager: RoomManager,
+  logger: FastifyBaseLogger,
+) {
+  io.on("connection", (socket: GameSocket) => {
+    // ~25 cursor + ~25 drag updates per second, with room for bursts.
+    const bucket = new TokenBucket(120, 80);
+
+    const parse = <T extends z.ZodType>(schema: T, payload: unknown): z.output<T> | null => {
+      if (!bucket.take()) return null;
+      const result = schema.safeParse(payload);
+      if (!result.success) {
+        logger.debug({ socketId: socket.id, issues: result.error.issues }, "invalid payload");
+        return null;
+      }
+      return result.data;
+    };
+
+    const current = async () => {
+      const { roomId, playerId } = socket.data;
+      if (!roomId || !playerId) return null;
+      const room = await manager.get(roomId);
+      if (!room || !room.isCurrentSocket(playerId, socket.id)) return null;
+      return { room, playerId };
+    };
+
+    socket.on("room:join", async (payload, ack) => {
+      if (typeof ack !== "function") return;
+      const data = parse(JoinPayloadSchema, payload);
+      if (!data) return ack({ ok: false, error: "invalid" });
+      const room = await manager.get(data.roomId);
+      if (!room) return ack({ ok: false, error: "not_found" });
+
+      const result = room.join(data, socket.id);
+      if (!result.ok) return ack(result);
+
+      if (result.replacedSocketId && result.replacedSocketId !== socket.id) {
+        // Same player opened the room in another tab: the new tab wins.
+        const old = io.sockets.sockets.get(result.replacedSocketId);
+        old?.emit("kicked");
+        old?.disconnect(true);
+      }
+      socket.data.roomId = data.roomId;
+      socket.data.playerId = data.clientId;
+      await socket.join(roomChannel(data.roomId));
+      ack({ ok: true, state: result.state });
+      logger.info({ roomId: data.roomId, playerId: data.clientId }, "player joined");
+    });
+
+    socket.on("room:sync", async (ack) => {
+      if (typeof ack !== "function") return;
+      const ctx = await current();
+      ack(ctx ? ctx.room.stateFor(ctx.playerId) : null);
+    });
+
+    socket.on("cursor:move", async (payload) => {
+      const data = parse(CursorPayloadSchema, payload);
+      const ctx = data && (await current());
+      if (ctx) ctx.room.cursor(ctx.playerId, socket.id, data.x, data.y);
+    });
+
+    socket.on("piece:grab", async (payload, ack) => {
+      if (typeof ack !== "function") return;
+      const data = parse(GrabPayloadSchema, payload);
+      const ctx = data && (await current());
+      ack(ctx ? ctx.room.grab(ctx.playerId, socket.id, data.groupId) : { ok: false });
+    });
+
+    socket.on("piece:move", async (payload) => {
+      const data = parse(MovePayloadSchema, payload);
+      const ctx = data && (await current());
+      if (ctx) ctx.room.move(ctx.playerId, socket.id, data);
+    });
+
+    socket.on("piece:drop", async (payload) => {
+      // Drops are never rate limited away: losing one would desync the dropper.
+      const result = DropPayloadSchema.safeParse(payload);
+      const ctx = result.success && (await current());
+      if (!ctx || !result.success) return;
+      const before = ctx.room.puzzle.groupCount;
+      ctx.room.drop(ctx.playerId, socket.id, result.data);
+      if (ctx.room.puzzle.groupCount !== before) void manager.save(ctx.room);
+    });
+
+    socket.on("puzzle:arrange", async () => {
+      if (!bucket.take()) return;
+      const ctx = await current();
+      ctx?.room.arrange();
+    });
+
+    socket.on("disconnect", async () => {
+      const ctx = await current();
+      ctx?.room.disconnect(ctx.playerId, socket.id);
+    });
+  });
+}

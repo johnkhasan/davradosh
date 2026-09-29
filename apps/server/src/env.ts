@@ -5,7 +5,8 @@ import { MAX_PLAYERS_PER_ROOM } from "@puzzle/shared";
 const EnvSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().positive().default(4000),
-  DATABASE_URL: z.string().url(),
+  /** Optional in development: without it rooms are kept in memory only. */
+  DATABASE_URL: z.string().url().optional(),
   /** Comma-separated list of allowed browser origins. */
   CORS_ORIGINS: z
     .string()
@@ -34,6 +35,9 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   if (!parsed.success) {
     console.error("Invalid environment variables:", z.treeifyError(parsed.error));
     throw new Error("Invalid environment variables");
+  }
+  if (parsed.data.NODE_ENV === "production" && !parsed.data.DATABASE_URL) {
+    throw new Error("DATABASE_URL is required in production");
   }
   return parsed.data;
 }

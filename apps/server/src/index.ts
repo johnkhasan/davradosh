@@ -1,30 +1,34 @@
-import { buildApp } from "./app";
 import { createDb } from "./db";
 import { loadEnv } from "./env";
-import { createSocketServer } from "./socket";
+import { MemoryRoomRepository } from "./rooms/memory-repository";
+import { PrismaRoomRepository } from "./rooms/prisma-repository";
+import { createGameServer } from "./server";
 
 const env = loadEnv();
-const db = createDb(env.DATABASE_URL);
+const db = env.DATABASE_URL ? createDb(env.DATABASE_URL) : null;
 
-const app = await buildApp({
+const server = await createGameServer({
   env,
+  repository: db ? new PrismaRoomRepository(db) : new MemoryRoomRepository(),
   checkDb: async () => {
+    if (!db) return true;
     await db.$queryRaw`SELECT 1`;
     return true;
   },
 });
 
-const io = createSocketServer(app.server, { corsOrigins: env.CORS_ORIGINS, logger: app.log });
+if (!db)
+  server.app.log.warn("DATABASE_URL is not set: rooms are kept in memory and lost on restart");
+server.manager.start();
 
 async function shutdown(signal: string) {
-  app.log.info({ signal }, "shutting down");
-  io.close();
-  await app.close();
-  await db.$disconnect();
+  server.app.log.info({ signal }, "shutting down");
+  await server.close();
+  await db?.$disconnect();
   process.exit(0);
 }
 
 process.on("SIGINT", () => void shutdown("SIGINT"));
 process.on("SIGTERM", () => void shutdown("SIGTERM"));
 
-await app.listen({ port: env.PORT, host: "0.0.0.0" });
+await server.app.listen({ port: env.PORT, host: "0.0.0.0" });

@@ -1,0 +1,137 @@
+import type { AddressInfo } from "node:net";
+import type {
+  ClientToServerEvents,
+  JoinAck,
+  RemoteSnap,
+  RoomStateDTO,
+  ServerToClientEvents,
+} from "@puzzle/shared";
+import { io as connect, type Socket } from "socket.io-client";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { MemoryRoomRepository } from "./rooms/memory-repository";
+import { createGameServer } from "./server";
+
+type Client = Socket<ServerToClientEvents, ClientToServerEvents>;
+
+let server: Awaited<ReturnType<typeof createGameServer>>;
+let url: string;
+const clients: Client[] = [];
+
+beforeAll(async () => {
+  server = await createGameServer({
+    env: { NODE_ENV: "test", CORS_ORIGINS: ["http://localhost:3000"], MAX_PLAYERS_PER_ROOM: 5 },
+    repository: new MemoryRoomRepository(),
+    checkDb: async () => true,
+  });
+  await server.app.listen({ port: 0, host: "127.0.0.1" });
+  url = `http://127.0.0.1:${(server.app.server.address() as AddressInfo).port}`;
+});
+
+afterAll(async () => {
+  for (const client of clients) client.disconnect();
+  await server.close();
+});
+
+async function createRoom(): Promise<string> {
+  const res = await fetch(`${url}/api/rooms`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ clientId: "host_client_1", imageId: "demo", pieces: 24 }),
+  });
+  expect(res.status).toBe(201);
+  return ((await res.json()) as { id: string }).id;
+}
+
+async function join(roomId: string, n: number): Promise<{ client: Client; ack: JoinAck }> {
+  const client: Client = connect(url, { transports: ["websocket"], forceNew: true });
+  clients.push(client);
+  const ack = await client.emitWithAck("room:join", {
+    roomId,
+    clientId: `client_${n}_abcdef`,
+    name: `Player ${n}`,
+    color: "#6C5CE7",
+    avatar: "🦊",
+  });
+  return { client, ack };
+}
+
+const next = <E extends keyof ServerToClientEvents>(client: Client, event: E) =>
+  new Promise<Parameters<ServerToClientEvents[E]>>((resolve) => {
+    client.once(event, ((...args: Parameters<ServerToClientEvents[E]>) => resolve(args)) as never);
+  });
+
+describe("game server over Socket.IO", () => {
+  it("creates a room and describes it", async () => {
+    const id = await createRoom();
+    const res = await fetch(`${url}/api/rooms/${id}`);
+    expect(await res.json()).toMatchObject({
+      id,
+      pieces: 24,
+      players: 0,
+      maxPlayers: 5,
+      full: false,
+    });
+    expect((await fetch(`${url}/api/rooms/nope1234`)).status).toBe(404);
+  });
+
+  it("rejects invalid room creation", async () => {
+    const res = await fetch(`${url}/api/rooms`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ clientId: "x", imageId: "demo", pieces: 7 }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("syncs players, cursors, grabs and snaps between clients and enforces 5 seats", async () => {
+    const roomId = await createRoom();
+    const a = await join(roomId, 1);
+    expect(a.ack.ok).toBe(true);
+    const state = (a.ack as { ok: true; state: RoomStateDTO }).state;
+    expect(state.puzzle.groups).toHaveLength(state.room.cols * state.room.rows);
+
+    const joined = next(a.client, "player:joined");
+    const b = await join(roomId, 2);
+    expect(b.ack.ok).toBe(true);
+    expect((await joined)[0].name).toBe("Player 2");
+
+    // Cursor from A reaches B.
+    const cursor = next(b.client, "cursor");
+    a.client.emit("cursor:move", { x: 10, y: 20 });
+    expect(await cursor).toEqual(["client_1_abcdef", 10, 20]);
+
+    // A grabs group 1, B cannot.
+    const grabbed = next(b.client, "piece:grabbed");
+    expect(await a.client.emitWithAck("piece:grab", { groupId: 1 })).toEqual({ ok: true });
+    expect(await grabbed).toEqual([1, "client_1_abcdef"]);
+    expect(await b.client.emitWithAck("piece:grab", { groupId: 1 })).toMatchObject({ ok: false });
+
+    // A drops piece 1 exactly next to piece 0 → both clients receive the snap.
+    const group0 = state.puzzle.groups.find((g) => g.id === 0)!;
+    const snapA = next(a.client, "piece:snapped");
+    const snapB = next(b.client, "piece:snapped");
+    a.client.emit("piece:drop", { groupId: 1, x: group0.x, y: group0.y });
+    const [resultA] = await snapA;
+    const [resultB] = (await snapB) as [RemoteSnap];
+    expect(resultA).toEqual(resultB);
+    expect(resultB).toMatchObject({ groupId: 0, absorbed: [1], playerId: "client_1_abcdef" });
+
+    // Fill the room to 5 and check the 6th is refused.
+    for (let n = 3; n <= 5; n++) expect((await join(roomId, n)).ack.ok).toBe(true);
+    expect((await join(roomId, 6)).ack).toEqual({ ok: false, error: "full" });
+  });
+
+  it("returns not_found and invalid errors on join", async () => {
+    expect((await join("missing1", 7)).ack).toEqual({ ok: false, error: "not_found" });
+    const client: Client = connect(url, { transports: ["websocket"], forceNew: true });
+    clients.push(client);
+    const ack = await client.emitWithAck("room:join", {
+      roomId: "bad",
+      clientId: "x",
+      name: "",
+      color: "red",
+      avatar: "",
+    } as never);
+    expect(ack).toEqual({ ok: false, error: "invalid" });
+  });
+});
