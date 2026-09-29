@@ -111,7 +111,13 @@ crontab -u deploy -e
 # 0 3 * * * /srv/puzzle/backup.sh >> /srv/puzzle/backup.log 2>&1
 ```
 
-Uptime: `https://api.puzzle.javohir.ru/health` (masalan, mavjud Uptime Kuma'ga qo'shing).
+Monitoring: serverdagi Uptime Kuma (`nasiya-uptime-kuma-1`, status.javohir.ru) har daqiqada tekshiradi:
+
+- `puzzle.javohir.ru (Puzzle Web)`: HTTP `https://puzzle.javohir.ru/`
+- `api.puzzle.javohir.ru (Puzzle API)`: `https://api.puzzle.javohir.ru/health` javobida `"db":true` bo'lishi shart
+
+Ikkalasi "Telegram (Puzzle alerts)" bildirishnomasiga ulangan: sayt tushsa va tiklansa admin chatga xabar keladi.
+`/health` javobi o'zgarsa, `"db":true` kalit so'zini saqlang yoki monitorni yangilang.
 
 ## Foydali buyruqlar
 
