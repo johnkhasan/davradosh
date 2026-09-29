@@ -113,6 +113,7 @@ export function CreateWizard() {
             <img
               src={preview.url}
               alt=""
+              referrerPolicy="no-referrer"
               className="w-56 rounded-control object-cover shadow-soft-md"
               style={{ aspectRatio: `${preview.aspect}` }}
             />

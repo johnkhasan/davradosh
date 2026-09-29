@@ -138,6 +138,7 @@ function GridPreview({
         <img
           src={previewUrl}
           alt="Tanlangan rasm"
+          referrerPolicy="no-referrer"
           className="absolute inset-0 h-full w-full object-cover"
         />
         <svg
