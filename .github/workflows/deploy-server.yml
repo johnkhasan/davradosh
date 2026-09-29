@@ -25,6 +25,19 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: puzzle
+          POSTGRES_PASSWORD: puzzle
+          POSTGRES_DB: puzzle
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U puzzle"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
 
@@ -36,16 +49,43 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: docker/build-push-action@v6
+      - name: Build image
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: apps/server/Dockerfile
-          push: true
+          load: true
           tags: |
             ${{ env.IMAGE }}:${{ github.sha }}
             ${{ env.IMAGE }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # Start the real image against Postgres: migrations, OpenSSL, health and a room round-trip.
+      - name: Smoke test image
+        run: |
+          docker run -d --name smoke --network host \
+            -e DATABASE_URL=postgresql://puzzle:puzzle@localhost:5432/puzzle \
+            -e CORS_ORIGINS=https://puzzle.javohir.ru \
+            -e PUBLIC_UPLOAD_URL=http://localhost:4000/uploads \
+            "$IMAGE:${{ github.sha }}"
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:4000/health; then break; fi
+            sleep 2
+          done
+          curl -fsS http://localhost:4000/health | grep '"db":true'
+          curl -fsS -X POST http://localhost:4000/api/rooms \
+            -H 'content-type: application/json' \
+            -d '{"clientId":"smoke_test_client","imageId":"demo","pieces":24}' | grep '"id"'
+
+      - name: Smoke test logs
+        if: always()
+        run: docker logs smoke || true
+
+      - name: Push image
+        run: |
+          docker push "$IMAGE:${{ github.sha }}"
+          docker push "$IMAGE:latest"
 
   deploy:
     needs: build
