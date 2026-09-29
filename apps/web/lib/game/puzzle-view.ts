@@ -7,6 +7,7 @@ import {
   type SnapResult,
 } from "@puzzle/shared";
 import { Application, ColorMatrixFilter, Container, Graphics, Sprite, Texture } from "pixi.js";
+import { OutlineFilter } from "pixi-filters";
 import { Camera, type CameraState } from "./camera";
 import {
   PIECE_PADDING,
@@ -44,8 +45,10 @@ interface GroupView {
   /** 0 = resting, 1 = lifted (being dragged). Animated towards `liftTarget`. */
   lift: number;
   liftTarget: number;
-  tween?: { fromX: number; fromY: number; toX: number; toY: number; t: number };
+  tween?: { fromX: number; fromY: number; toX: number; toY: number; t: number; duration: number };
   flash?: { t: number; filter: ColorMatrixFilter };
+  /** Outline in the colour of the remote player holding this group. */
+  holder?: OutlineFilter;
 }
 
 interface DragState {
@@ -225,11 +228,11 @@ export class PuzzleView {
   }
 
   /** Re-reads one group from the state (after a local or remote move). */
-  syncGroup(groupId: number, opts: { animate?: boolean } = {}) {
+  syncGroup(groupId: number, opts: { animate?: boolean; duration?: number } = {}) {
     const group = this.opts.state.getGroup(groupId);
     const view = this.groups.get(groupId);
     if (!group || !view) return;
-    if (opts.animate) this.tweenTo(view, group.x, group.y);
+    if (opts.animate) this.tweenTo(view, group.x, group.y, opts.duration);
     else {
       view.tween = undefined;
       view.container.position.set(group.x, group.y);
@@ -250,8 +253,7 @@ export class PuzzleView {
     for (const absorbedId of result.absorbed) {
       const absorbed = this.groups.get(absorbedId);
       if (!absorbed) continue;
-      absorbed.flash?.filter.destroy();
-      absorbed.container.destroy({ children: true });
+      this.destroyGroupView(absorbed);
       this.groups.delete(absorbedId);
     }
 
@@ -271,6 +273,45 @@ export class PuzzleView {
     if (lifted && view.container.parent === this.looseLayer) {
       this.looseLayer.addChild(view.container);
     }
+  }
+
+  /** Shows (or clears) the coloured outline of the remote player holding a group. */
+  setHolder(groupId: number, color: string | null) {
+    const view = this.groups.get(groupId);
+    if (!view) return;
+    if (color) {
+      view.holder ??= new OutlineFilter({ thickness: 3, quality: 0.15 });
+      view.holder.color = color;
+    } else if (view.holder) {
+      view.holder.destroy();
+      view.holder = undefined;
+    }
+    this.updateFilters(view);
+  }
+
+  /** Aborts the local drag (e.g. the server refused the grab) and returns the group to its state position. */
+  cancelDrag(groupId: number) {
+    if (this.drag?.groupId !== groupId) {
+      this.syncGroup(groupId, { animate: true });
+      return;
+    }
+    this.drag = null;
+    this.setLifted(groupId, false);
+    this.syncGroup(groupId, { animate: true });
+    this.app.canvas.style.cursor = "";
+  }
+
+  get draggingGroupId(): number | null {
+    return this.drag?.groupId ?? null;
+  }
+
+  /** Recreates every group view from the state (after a full resync). */
+  rebuild() {
+    this.drag = null;
+    for (const view of this.groups.values()) this.destroyGroupView(view);
+    this.groups.clear();
+    for (const group of this.opts.state.allGroups()) this.createGroupView(group);
+    this.setEdgeFilter(this.edgeFilter);
   }
 
   fitToContent() {
@@ -330,14 +371,38 @@ export class PuzzleView {
     view.shadows.visible = !group.placed;
   }
 
-  private tweenTo(view: GroupView, x: number, y: number) {
-    view.tween = { fromX: view.container.x, fromY: view.container.y, toX: x, toY: y, t: 0 };
+  private tweenTo(view: GroupView, x: number, y: number, duration = TWEEN_MS) {
+    view.tween = {
+      fromX: view.container.x,
+      fromY: view.container.y,
+      toX: x,
+      toY: y,
+      t: 0,
+      duration,
+    };
   }
 
   private flash(view: GroupView) {
     const filter = view.flash?.filter ?? new ColorMatrixFilter();
     view.flash = { t: 0, filter };
-    view.pieces.filters = [filter];
+    this.updateFilters(view);
+  }
+
+  private updateFilters(view: GroupView) {
+    const filters = [];
+    if (view.holder) filters.push(view.holder);
+    if (view.flash) filters.push(view.flash.filter);
+    view.pieces.filters = filters;
+  }
+
+  private destroyGroupView(view: GroupView) {
+    // Piece sprites are reused across groups, so detach them before destroying containers.
+    view.shadows.removeChildren();
+    view.pieces.removeChildren();
+    view.pieces.filters = [];
+    view.flash?.filter.destroy();
+    view.holder?.destroy();
+    view.container.destroy({ children: true });
   }
 
   private tick = () => {
@@ -345,7 +410,7 @@ export class PuzzleView {
     for (const view of this.groups.values()) {
       if (view.tween) {
         const tween = view.tween;
-        tween.t = Math.min(1, tween.t + dt / TWEEN_MS);
+        tween.t = Math.min(1, tween.t + dt / tween.duration);
         const e = 1 - Math.pow(1 - tween.t, 3);
         view.container.position.set(
           tween.fromX + (tween.toX - tween.fromX) * e,
@@ -373,9 +438,9 @@ export class PuzzleView {
         view.flash.t = Math.min(1, view.flash.t + dt / FLASH_MS);
         view.flash.filter.brightness(1 + 0.35 * (1 - view.flash.t), false);
         if (view.flash.t >= 1) {
-          view.pieces.filters = [];
           view.flash.filter.destroy();
           view.flash = undefined;
+          this.updateFilters(view);
         }
       }
     }

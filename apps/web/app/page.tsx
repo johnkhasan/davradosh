@@ -1,5 +1,6 @@
 import { MAX_PLAYERS_PER_ROOM } from "@puzzle/shared";
 import Link from "next/link";
+import { CreateRoomButton } from "@/components/create-room-button";
 import { ServerStatus } from "@/components/server-status";
 
 export default function Home() {
@@ -15,12 +16,15 @@ export default function Home() {
         Rasm tanlang, linkni ulashing va {MAX_PLAYERS_PER_ROOM} kishigacha do&apos;stlaringiz bilan
         real vaqtda yig&apos;ing.
       </p>
-      <Link
-        href="/play"
-        className="rounded-control bg-primary px-6 py-3 font-medium text-primary-foreground shadow-soft-md transition-transform hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:outline-none"
-      >
-        Mashq maydonida sinab ko&apos;rish
-      </Link>
+      <div className="flex flex-col items-center gap-3 sm:flex-row">
+        <CreateRoomButton />
+        <Link
+          href="/play"
+          className="rounded-control border border-border bg-surface px-6 py-3 font-medium shadow-soft-sm transition-colors hover:bg-surface-muted focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+        >
+          Yolg&apos;iz mashq qilish
+        </Link>
+      </div>
       <ServerStatus />
     </main>
   );

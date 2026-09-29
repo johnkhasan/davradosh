@@ -38,10 +38,13 @@ export function createRoomEmitter(io: GameServer, roomId: string): RoomEmitter {
   const channel = roomChannel(roomId);
   return {
     all: (event, ...args) => io.to(channel).emit(event, ...args),
-    others: (socketId, volatile, event, ...args) => {
-      const target = io.to(channel).except(socketId);
-      (volatile ? target.volatile : target).emit(event, ...args);
-    },
+    // Not volatile on purpose: volatile packets sent in the same tick (cursor + drag)
+    // drop each other. Traffic is tiny with at most 5 players per room.
+    others: (socketId, event, ...args) =>
+      io
+        .to(channel)
+        .except(socketId)
+        .emit(event, ...args),
     one: (socketId, event, ...args) => io.to(socketId).emit(event, ...args),
   };
 }

@@ -99,3 +99,26 @@ export function createDemoImage(width = 1600, height = 1200, seed = 7): PuzzleIm
   ctx.fillText("Birga yig'amiz", width * 0.3, height * 0.2);
   return canvas;
 }
+
+/**
+ * Loads a room image at exactly the size the server uses for piece geometry,
+ * so every client renders identical pieces.
+ */
+export async function loadRoomImage(
+  image: { source: string; url: string; width: number; height: number },
+  seed: number,
+): Promise<PuzzleImage> {
+  if (image.source === "demo") return createDemoImage(image.width, image.height, seed);
+  const element = new Image();
+  element.crossOrigin = "anonymous";
+  element.decoding = "async";
+  element.src = image.url;
+  await element.decode();
+  const canvas = document.createElement("canvas");
+  canvas.width = image.width;
+  canvas.height = image.height;
+  const ctx = canvas.getContext("2d")!;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(element, 0, 0, image.width, image.height);
+  return canvas;
+}

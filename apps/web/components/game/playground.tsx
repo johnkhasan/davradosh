@@ -14,19 +14,12 @@ import {
   VolumeX,
 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createDemoImage, loadImageFile, type PuzzleImage } from "@/lib/game/images";
 import { setSoundEnabled } from "@/lib/game/sounds";
 import { cn } from "@/lib/utils";
 import { PuzzleCanvas, type PuzzleCanvasHandle, type PuzzleProgress } from "./puzzle-canvas";
-
-const TABLES = {
-  felt: "Kigiz",
-  wood: "Yog'och",
-  dark: "Qorong'i",
-  dots: "Nuqtali",
-} as const;
-type Table = keyof typeof TABLES;
+import { formatDuration, ProgressBar, TABLES, tableClass, ToolButton, type Table } from "./ui";
 
 export function Playground() {
   const canvasRef = useRef<PuzzleCanvasHandle>(null);
@@ -93,8 +86,6 @@ export function Playground() {
     restart();
   };
 
-  const percent = progress.total ? Math.round((progress.connected / progress.total) * 100) : 0;
-
   return (
     <div className="fixed inset-0 flex flex-col overflow-hidden bg-background">
       <header className="z-10 flex flex-wrap items-center gap-3 border-b border-border bg-surface/90 px-4 py-2.5 backdrop-blur">
@@ -104,23 +95,8 @@ export function Playground() {
         <span className="rounded-full bg-primary-soft px-2.5 py-0.5 text-xs font-medium text-primary">
           Mashq maydoni
         </span>
-        <div className="ml-auto flex min-w-48 flex-1 items-center gap-3 sm:max-w-sm">
-          <div
-            className="h-2 flex-1 overflow-hidden rounded-full bg-surface-muted"
-            role="progressbar"
-            aria-valuenow={percent}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-label="Yig'ilgan bo'laklar"
-          >
-            <div
-              className="h-full rounded-full bg-gradient-to-r from-primary to-snap transition-[width] duration-500 ease-out"
-              style={{ width: `${percent}%` }}
-            />
-          </div>
-          <span className="w-24 text-right text-sm tabular-nums text-muted">
-            {progress.connected}/{progress.total} · {percent}%
-          </span>
+        <div className="ml-auto flex flex-1 justify-end">
+          <ProgressBar connected={progress.connected} total={progress.total} />
         </div>
         <select
           value={pieces}
@@ -257,48 +233,4 @@ export function Playground() {
       </div>
     </div>
   );
-}
-
-function ToolButton({
-  label,
-  active,
-  onClick,
-  children,
-}: {
-  label: string;
-  active?: boolean;
-  onClick: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      title={label}
-      aria-label={label}
-      aria-pressed={active}
-      onClick={onClick}
-      className={cn(
-        "flex size-10 items-center justify-center rounded-control text-foreground/80 transition-colors hover:bg-surface-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none [&_svg]:size-5",
-        active && "bg-primary-soft text-primary hover:bg-primary-soft hover:text-primary",
-      )}
-    >
-      {children}
-    </button>
-  );
-}
-
-function tableClass(table: Table) {
-  return {
-    felt: "table-felt",
-    wood: "table-wood",
-    dark: "table-dark",
-    dots: "table-dots",
-  }[table];
-}
-
-function formatDuration(ms: number) {
-  const total = Math.round(ms / 1000);
-  const minutes = Math.floor(total / 60);
-  const seconds = total % 60;
-  return minutes ? `${minutes} daqiqa ${seconds} soniya` : `${seconds} soniya`;
 }

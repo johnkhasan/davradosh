@@ -22,13 +22,8 @@ type EventArgs<E extends EventName> = Parameters<ServerToClientEvents[E]>;
 export interface RoomEmitter {
   /** Everyone in the room. */
   all<E extends EventName>(event: E, ...args: EventArgs<E>): void;
-  /** Everyone except the given socket. `volatile` messages may be dropped under load. */
-  others<E extends EventName>(
-    socketId: string,
-    volatile: boolean,
-    event: E,
-    ...args: EventArgs<E>
-  ): void;
+  /** Everyone except the given socket. */
+  others<E extends EventName>(socketId: string, event: E, ...args: EventArgs<E>): void;
   /** One socket. */
   one<E extends EventName>(socketId: string, event: E, ...args: EventArgs<E>): void;
 }
@@ -136,7 +131,7 @@ export class Room {
         connected: true,
       };
       this.lastActiveAt = this.now();
-      this.emit.others(socketId, false, "player:updated", existing.dto);
+      this.emit.others(socketId, "player:updated", existing.dto);
       return { ok: true, state: this.stateFor(payload.clientId), replacedSocketId };
     }
 
@@ -157,7 +152,7 @@ export class Room {
     this.players.set(payload.clientId, player);
     this.stats[payload.clientId] ??= { merges: 0 };
     this.lastActiveAt = this.now();
-    this.emit.others(socketId, false, "player:joined", player.dto);
+    this.emit.others(socketId, "player:joined", player.dto);
     return { ok: true, state: this.stateFor(payload.clientId), replacedSocketId: null };
   }
 
@@ -193,7 +188,7 @@ export class Room {
   // ---------------------------------------------------------------- cursors & pieces
 
   cursor(playerId: string, socketId: string, x: number, y: number) {
-    this.emit.others(socketId, true, "cursor", playerId, x, y);
+    this.emit.others(socketId, "cursor", playerId, x, y);
   }
 
   grab(playerId: string, socketId: string, groupId: number): GrabAck {
@@ -207,8 +202,7 @@ export class Room {
     // A player drags one group at a time.
     this.releaseLocksOf(playerId, groupId);
     this.locks.set(groupId, { playerId, at: now });
-    if (lock?.playerId !== playerId)
-      this.emit.others(socketId, false, "piece:grabbed", groupId, playerId);
+    if (lock?.playerId !== playerId) this.emit.others(socketId, "piece:grabbed", groupId, playerId);
     return { ok: true };
   }
 
@@ -218,7 +212,7 @@ export class Room {
     if (!this.puzzle.moveGroup(groupId, x, y)) return;
     lock.at = this.now();
     this.dirty = true;
-    this.emit.others(socketId, true, "piece:moved", groupId, x, y);
+    this.emit.others(socketId, "piece:moved", groupId, x, y);
   }
 
   drop(playerId: string, socketId: string, { groupId, x, y }: DropPayload) {

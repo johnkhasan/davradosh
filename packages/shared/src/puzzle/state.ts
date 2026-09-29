@@ -51,6 +51,13 @@ export class PuzzleState {
   constructor(config: PuzzleConfig, snapshot: PuzzleSnapshot) {
     this.config = config;
     this.pieceToGroup = new Int32Array(config.cols * config.rows).fill(-1);
+    this.replaceWith(snapshot);
+  }
+
+  /** Replaces all groups in place (full resync from the server). */
+  replaceWith(snapshot: PuzzleSnapshot) {
+    this.groups.clear();
+    this.pieceToGroup.fill(-1);
     for (const group of snapshot.groups) {
       const copy = { ...group, pieceIds: [...group.pieceIds] };
       this.groups.set(copy.id, copy);

@@ -135,3 +135,14 @@ body {
   background-image: radial-gradient(rgb(28 26 36 / 0.16) 1.2px, transparent 1.2px);
   background-size: 22px 22px;
 }
+
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}

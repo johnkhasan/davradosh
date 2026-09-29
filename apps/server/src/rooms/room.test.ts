@@ -14,7 +14,7 @@ function spyEmitter() {
   const sent: Sent[] = [];
   const emitter: RoomEmitter = {
     all: (event, ...args) => sent.push({ to: "all", event, args }),
-    others: (socket, _volatile, event, ...args) => sent.push({ to: "others", socket, event, args }),
+    others: (socket, event, ...args) => sent.push({ to: "others", socket, event, args }),
     one: (socket, event, ...args) => sent.push({ to: "one", socket, event, args }),
   };
   return { sent, emitter, events: (name: string) => sent.filter((s) => s.event === name) };
