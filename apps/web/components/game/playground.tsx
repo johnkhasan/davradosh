@@ -133,7 +133,7 @@ export function Playground() {
 
         <nav
           aria-label="Asboblar"
-          className="absolute top-1/2 left-3 flex -translate-y-1/2 flex-col gap-1 rounded-card border border-border bg-surface/95 p-1.5 shadow-soft-md backdrop-blur"
+          className="absolute bottom-3 left-3 z-10 flex flex-row gap-1 rounded-card border border-border bg-surface/95 p-1.5 shadow-soft-md backdrop-blur sm:top-1/2 sm:bottom-auto sm:-translate-y-1/2 sm:flex-col"
         >
           <ToolButton
             label="Asl rasm (Tab ni bosib turing)"
@@ -177,7 +177,7 @@ export function Playground() {
           <select
             value={table}
             onChange={(e) => setTable(e.target.value as Table)}
-            className="rounded-control bg-transparent px-2 py-1 text-sm"
+            className="hidden rounded-control bg-transparent px-2 py-1 text-sm sm:block"
             aria-label="Stol foni"
           >
             {Object.entries(TABLES).map(([value, label]) => (
@@ -186,10 +186,18 @@ export function Playground() {
               </option>
             ))}
           </select>
-          <ToolButton label="Kichiklashtirish (−)" onClick={() => canvasRef.current?.zoomBy(0.8)}>
+          <ToolButton
+            label="Kichiklashtirish (−)"
+            className="hidden sm:flex"
+            onClick={() => canvasRef.current?.zoomBy(0.8)}
+          >
             <Minus />
           </ToolButton>
-          <ToolButton label="Kattalashtirish (+)" onClick={() => canvasRef.current?.zoomBy(1.25)}>
+          <ToolButton
+            label="Kattalashtirish (+)"
+            className="hidden sm:flex"
+            onClick={() => canvasRef.current?.zoomBy(1.25)}
+          >
             <Plus />
           </ToolButton>
           <ToolButton label="Hammasini ko'rsatish (F)" onClick={() => canvasRef.current?.fit()}>

@@ -4,6 +4,7 @@ import { MAX_PLAYERS_PER_ROOM, type PlayerDTO } from "@puzzle/shared";
 import {
   Check,
   Eye,
+  X,
   Frame,
   LayoutGrid,
   Link2,
@@ -23,6 +24,8 @@ import { loadIdentity, type Identity } from "@/lib/identity";
 import { RoomController, type RoomError } from "@/lib/realtime/room-controller";
 import { cn } from "@/lib/utils";
 import { CursorLayer } from "./cursor-layer";
+import { Minimap } from "./minimap";
+import { ReactionBar, ReactionLayer } from "./reactions";
 import {
   Avatar,
   formatDuration,
@@ -92,6 +95,7 @@ function RoomScreen({ roomId, identity }: { roomId: string; identity: Identity }
         e.preventDefault();
         setGhost(true);
       }
+      if (e.key === "Escape") controller.follow(null);
       if (e.key === "f" || e.key === "F") view?.fitToContent();
       if (e.key === "+" || e.key === "=") view?.zoomBy(1.25);
       if (e.key === "-" || e.key === "_") view?.zoomBy(0.8);
@@ -105,7 +109,9 @@ function RoomScreen({ roomId, identity }: { roomId: string; identity: Identity }
     };
   }, [controller]);
 
-  const { room, players, me, status, error, progress, completed, holding, notice } = snapshot;
+  const { room, players, me, status, error, progress, completed, holding, notice, following } =
+    snapshot;
+  const followed = following ? players.find((p) => p.id === following) : undefined;
 
   if (status === "error" && error) return <RoomErrorScreen error={error} />;
 
@@ -127,7 +133,13 @@ function RoomScreen({ roomId, identity }: { roomId: string; identity: Identity }
           <ProgressBar connected={progress.connected} total={progress.total} />
         </div>
         <div className="ml-auto flex items-center gap-2">
-          <PlayerStack players={players} me={me} holding={holding} />
+          <PlayerStack
+            players={players}
+            me={me}
+            holding={holding}
+            following={following}
+            onFollow={(id) => controller.follow(following === id ? null : id)}
+          />
           <span className="text-sm text-muted tabular-nums" title="O'yinchilar">
             {connectedPlayers.length}/{room?.maxPlayers ?? MAX_PLAYERS_PER_ROOM}
           </span>
@@ -138,6 +150,32 @@ function RoomScreen({ roomId, identity }: { roomId: string; identity: Identity }
       <div className={cn("relative flex-1", tableClass(table))}>
         <div ref={hostRef} className="absolute inset-0" />
         <CursorLayer controller={controller} players={players} me={me} holding={holding} />
+        <ReactionLayer controller={controller} players={players} />
+
+        {followed && (
+          <>
+            <div
+              className="pointer-events-none absolute inset-0 border-4"
+              style={{ borderColor: followed.color }}
+              aria-hidden
+            />
+            <div
+              role="status"
+              className="absolute top-3 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full py-1 pr-1 pl-3 text-sm font-medium text-white shadow-soft-md"
+              style={{ backgroundColor: followed.color }}
+            >
+              {followed.avatar} {followed.name}ni kuzatyapsiz
+              <button
+                type="button"
+                onClick={() => controller.follow(null)}
+                className="flex items-center gap-1 rounded-full bg-black/20 px-2 py-0.5 text-xs hover:bg-black/30"
+                aria-label="Kuzatishni to'xtatish (Esc)"
+              >
+                <X className="size-3" aria-hidden /> Esc
+              </button>
+            </div>
+          </>
+        )}
 
         {(status === "connecting" || status === "loading") && (
           <div className="absolute inset-0 flex items-center justify-center">
@@ -160,7 +198,7 @@ function RoomScreen({ roomId, identity }: { roomId: string; identity: Identity }
 
         <nav
           aria-label="Asboblar"
-          className="absolute top-1/2 left-3 flex -translate-y-1/2 flex-col gap-1 rounded-card border border-border bg-surface/95 p-1.5 shadow-soft-md backdrop-blur"
+          className="absolute bottom-3 left-3 z-10 flex flex-row gap-1 rounded-card border border-border bg-surface/95 p-1.5 shadow-soft-md backdrop-blur sm:top-1/2 sm:bottom-auto sm:-translate-y-1/2 sm:flex-col"
         >
           <ToolButton
             label="Asl rasm (Tab ni bosib turing)"
@@ -194,7 +232,7 @@ function RoomScreen({ roomId, identity }: { roomId: string; identity: Identity }
           <select
             value={table}
             onChange={(e) => setTable(e.target.value as Table)}
-            className="rounded-control bg-transparent px-2 py-1 text-sm"
+            className="hidden rounded-control bg-transparent px-2 py-1 text-sm sm:block"
             aria-label="Stol foni"
           >
             {Object.entries(TABLES).map(([value, label]) => (
@@ -205,12 +243,14 @@ function RoomScreen({ roomId, identity }: { roomId: string; identity: Identity }
           </select>
           <ToolButton
             label="Kichiklashtirish (−)"
+            className="hidden sm:flex"
             onClick={() => controller.puzzleView?.zoomBy(0.8)}
           >
             <Minus />
           </ToolButton>
           <ToolButton
             label="Kattalashtirish (+)"
+            className="hidden sm:flex"
             onClick={() => controller.puzzleView?.zoomBy(1.25)}
           >
             <Plus />
@@ -221,6 +261,14 @@ function RoomScreen({ roomId, identity }: { roomId: string; identity: Identity }
           >
             <Maximize />
           </ToolButton>
+        </div>
+
+        <div className="absolute bottom-3 left-1/2 hidden -translate-x-1/2 sm:block">
+          <ReactionBar onReact={(emoji) => controller.react(emoji)} />
+        </div>
+
+        <div className="absolute bottom-3 left-3 hidden rounded-card border border-border bg-surface/80 p-1.5 shadow-soft-md backdrop-blur lg:block">
+          <Minimap controller={controller} players={players} me={me} />
         </div>
 
         <Notice notice={notice} />
@@ -243,23 +291,36 @@ function PlayerStack({
   players,
   me,
   holding,
+  following,
+  onFollow,
 }: {
   players: PlayerDTO[];
   me: string;
   holding: Record<string, number>;
+  following: string | null;
+  onFollow: (playerId: string) => void;
 }) {
   const sorted = [...players].sort((a, b) => Number(b.id === me) - Number(a.id === me));
   return (
     <ul className="flex -space-x-2" aria-label="O'yinchilar">
       {sorted.map((player) => (
         <li key={player.id} className="relative">
-          <Avatar
-            name={`${player.name}${player.id === me ? " (siz)" : ""}${player.isHost ? " · host" : ""}${player.connected ? "" : " · uzilgan"}`}
-            color={player.color}
-            avatar={player.avatar}
-            dimmed={!player.connected}
-            ring={holding[player.id] !== undefined}
-          />
+          <button
+            type="button"
+            disabled={player.id === me || !player.connected}
+            onClick={() => onFollow(player.id)}
+            aria-pressed={following === player.id}
+            title={player.id === me ? `${player.name} (siz)` : `${player.name}: ekranini kuzatish`}
+            className="block rounded-full transition-transform enabled:hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none disabled:cursor-default"
+          >
+            <Avatar
+              name={`${player.name}${player.id === me ? " (siz)" : ""}${player.isHost ? " · host" : ""}${player.connected ? "" : " · uzilgan"}`}
+              color={player.color}
+              avatar={player.avatar}
+              dimmed={!player.connected}
+              ring={holding[player.id] !== undefined || following === player.id}
+            />
+          </button>
           {player.isHost && (
             <span className="absolute -top-1 -right-1 text-[10px]" aria-hidden>
               👑

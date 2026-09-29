@@ -28,6 +28,8 @@ export interface PuzzleViewOptions {
   /** Pointer position in world coordinates (for multiplayer cursors). */
   onPointerMove?: (x: number, y: number) => void;
   onCameraChange?: (camera: CameraState) => void;
+  /** The user panned or zoomed (used to stop follow mode). */
+  onUserCamera?: () => void;
 }
 
 interface PieceView {
@@ -91,6 +93,7 @@ export class PuzzleView {
   private pan: PanState | null = null;
   private pinch: { distance: number; midX: number; midY: number } | null = null;
   private edgeFilter = false;
+  private cameraTween: { from: CameraState; to: CameraState; t: number } | null = null;
   private spaceDown = false;
   private destroyed = false;
 
@@ -315,14 +318,60 @@ export class PuzzleView {
   }
 
   fitToContent() {
+    this.userCamera();
     const bounds = this.contentBounds();
     this.camera.fit(bounds, { width: this.app.screen.width, height: this.app.screen.height });
     this.applyCamera();
   }
 
   zoomBy(factor: number) {
+    this.userCamera();
     this.camera.zoomAt(this.app.screen.width / 2, this.app.screen.height / 2, factor);
     this.applyCamera();
+  }
+
+  /** The world rectangle currently visible. */
+  viewportRect() {
+    const topLeft = this.camera.toWorld(0, 0);
+    return {
+      x: topLeft.x,
+      y: topLeft.y,
+      width: this.app.screen.width / this.camera.zoom,
+      height: this.app.screen.height / this.camera.zoom,
+    };
+  }
+
+  /** World rectangle containing the board and every piece. */
+  worldBounds() {
+    return this.contentBounds();
+  }
+
+  /** Smoothly shows the given world rectangle (follow mode). */
+  lookAt(rect: { x: number; y: number; width: number; height: number }) {
+    const target = new Camera();
+    target.fit(rect, { width: this.app.screen.width, height: this.app.screen.height }, 0);
+    this.cameraTween = { from: this.camera.state, to: target.state, t: 0 };
+  }
+
+  /** Centres the camera on a world point, keeping the zoom (minimap clicks). */
+  centerOn(x: number, y: number, animate = true) {
+    this.userCamera();
+    const to = {
+      zoom: this.camera.zoom,
+      x: this.app.screen.width / 2 - x * this.camera.zoom,
+      y: this.app.screen.height / 2 - y * this.camera.zoom,
+    };
+    if (animate) {
+      this.cameraTween = { from: this.camera.state, to, t: 0 };
+    } else {
+      Object.assign(this.camera, to);
+      this.applyCamera();
+    }
+  }
+
+  private userCamera() {
+    this.cameraTween = null;
+    this.opts.onUserCamera?.();
   }
 
   destroy() {
@@ -407,6 +456,17 @@ export class PuzzleView {
 
   private tick = () => {
     const dt = this.app.ticker.deltaMS;
+    if (this.cameraTween) {
+      const tween = this.cameraTween;
+      tween.t = Math.min(1, tween.t + dt / 320);
+      const e = 1 - Math.pow(1 - tween.t, 3);
+      // Interpolate zoom geometrically so zooming feels even.
+      this.camera.zoom = tween.from.zoom * Math.pow(tween.to.zoom / tween.from.zoom, e);
+      this.camera.x = tween.from.x + (tween.to.x - tween.from.x) * e;
+      this.camera.y = tween.from.y + (tween.to.y - tween.from.y) * e;
+      if (tween.t >= 1) this.cameraTween = null;
+      this.applyCamera();
+    }
     for (const view of this.groups.values()) {
       if (view.tween) {
         const tween = view.tween;
@@ -562,6 +622,7 @@ export class PuzzleView {
     this.opts.onPointerMove?.(world.x, world.y);
 
     if (this.pinch && this.pointers.size === 2) {
+      this.userCamera();
       const next = this.pinchMetrics();
       this.camera.pan(next.midX - this.pinch.midX, next.midY - this.pinch.midY);
       this.camera.zoomAt(next.midX, next.midY, next.distance / this.pinch.distance);
@@ -583,6 +644,7 @@ export class PuzzleView {
     }
 
     if (this.pan && this.pan.pointerId === event.pointerId) {
+      this.userCamera();
       this.camera.pan(point.x - this.pan.lastX, point.y - this.pan.lastY);
       this.pan.lastX = point.x;
       this.pan.lastY = point.y;
@@ -614,6 +676,7 @@ export class PuzzleView {
 
   private onWheel = (event: WheelEvent) => {
     event.preventDefault();
+    this.userCamera();
     const point = this.localPoint(event);
     // Pinch on a trackpad arrives as ctrl+wheel; a mouse wheel zooms too.
     const isMouseWheel =

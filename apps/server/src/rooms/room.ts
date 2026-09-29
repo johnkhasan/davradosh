@@ -9,9 +9,11 @@ import {
   type MovePayload,
   type PlayerDTO,
   type PlayerStatsDTO,
+  type ReactionPayload,
   type RoomInfoDTO,
   type RoomStateDTO,
   type ServerToClientEvents,
+  type ViewportPayload,
 } from "@puzzle/shared";
 import type { RoomRecord, RoomStateUpdate } from "./repository";
 
@@ -189,6 +191,14 @@ export class Room {
 
   cursor(playerId: string, socketId: string, x: number, y: number) {
     this.emit.others(socketId, "cursor", playerId, x, y);
+  }
+
+  reaction(playerId: string, socketId: string, { emoji, x, y }: ReactionPayload) {
+    this.emit.others(socketId, "reaction", playerId, emoji, x, y);
+  }
+
+  viewport(playerId: string, socketId: string, rect: ViewportPayload) {
+    this.emit.others(socketId, "viewport", playerId, rect);
   }
 
   grab(playerId: string, socketId: string, groupId: number): GrabAck {

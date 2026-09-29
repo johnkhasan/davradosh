@@ -46,6 +46,24 @@ export const JoinPayloadSchema = z.object({
   avatar: AvatarSchema,
 });
 export const CursorPayloadSchema = z.object({ x: Coordinate, y: Coordinate });
+
+/** Quick reactions shown floating from the sender's cursor. */
+export const REACTION_EMOJIS = ["👍", "🎉", "👏", "🔥", "😮", "😂", "❤️", "🧩"] as const;
+export type ReactionEmoji = (typeof REACTION_EMOJIS)[number];
+export const ReactionPayloadSchema = z.object({
+  emoji: z.enum(REACTION_EMOJIS),
+  x: Coordinate,
+  y: Coordinate,
+});
+
+const Extent = z.number().finite().positive().max(10_000_000);
+/** The world rectangle a player currently sees (minimap and follow mode). */
+export const ViewportPayloadSchema = z.object({
+  x: Coordinate,
+  y: Coordinate,
+  width: Extent,
+  height: Extent,
+});
 export const GrabPayloadSchema = z.object({ groupId: GroupId });
 export const MovePayloadSchema = z.object({ groupId: GroupId, x: Coordinate, y: Coordinate });
 export const DropPayloadSchema = MovePayloadSchema;
@@ -63,6 +81,8 @@ export const CreateRoomSchema = z.object({
 
 export type JoinPayload = z.infer<typeof JoinPayloadSchema>;
 export type CursorPayload = z.infer<typeof CursorPayloadSchema>;
+export type ReactionPayload = z.infer<typeof ReactionPayloadSchema>;
+export type ViewportPayload = z.infer<typeof ViewportPayloadSchema>;
 export type GrabPayload = z.infer<typeof GrabPayloadSchema>;
 export type MovePayload = z.infer<typeof MovePayloadSchema>;
 export type DropPayload = z.infer<typeof DropPayloadSchema>;
@@ -135,6 +155,8 @@ export interface ServerToClientEvents {
   "player:updated": (player: PlayerDTO) => void;
   "player:left": (playerId: string) => void;
   cursor: (playerId: string, x: number, y: number) => void;
+  reaction: (playerId: string, emoji: ReactionEmoji, x: number, y: number) => void;
+  viewport: (playerId: string, rect: ViewportPayload) => void;
   "piece:grabbed": (groupId: number, playerId: string) => void;
   "piece:released": (groupId: number) => void;
   "piece:moved": (groupId: number, x: number, y: number) => void;
@@ -149,6 +171,8 @@ export interface ClientToServerEvents {
   "room:join": (payload: JoinPayload, ack: (result: JoinAck) => void) => void;
   "room:sync": (ack: (state: RoomStateDTO | null) => void) => void;
   "cursor:move": (payload: CursorPayload) => void;
+  reaction: (payload: ReactionPayload) => void;
+  viewport: (payload: ViewportPayload) => void;
   "piece:grab": (payload: GrabPayload, ack: (result: GrabAck) => void) => void;
   "piece:move": (payload: MovePayload) => void;
   "piece:drop": (payload: DropPayload) => void;

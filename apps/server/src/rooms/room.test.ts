@@ -224,3 +224,19 @@ describe("Room", () => {
     expect(restored.puzzle.snapshot()).toEqual(room.puzzle.snapshot());
   });
 });
+
+describe("Room relays", () => {
+  it("relays reactions and viewports to other players only", () => {
+    const spy = spyEmitter();
+    const room = new Room(record(), spy.emitter);
+    room.join(player(1), "s1");
+    room.reaction(player(1).clientId, "s1", { emoji: "🎉", x: 10, y: 20 });
+    room.viewport(player(1).clientId, "s1", { x: 0, y: 0, width: 800, height: 600 });
+    expect(spy.events("reaction")[0]).toMatchObject({
+      to: "others",
+      socket: "s1",
+      args: [player(1).clientId, "🎉", 10, 20],
+    });
+    expect(spy.events("viewport")[0]).toMatchObject({ to: "others", socket: "s1" });
+  });
+});

@@ -5,11 +5,13 @@ import {
   type JoinError,
   type PlayerDTO,
   type PlayerStatsDTO,
+  type ReactionEmoji,
   type RemoteSnap,
   type RoomInfoDTO,
   type RoomStateDTO,
   type ServerToClientEvents,
   type SnapResult,
+  type ViewportPayload,
 } from "@puzzle/shared";
 import { io, type Socket } from "socket.io-client";
 import { WS_URL } from "../env";
@@ -35,6 +37,16 @@ export interface RoomSnapshot {
   completed: { durationMs: number; stats: Record<string, PlayerStatsDTO> } | null;
   /** Transient message, e.g. "Malika ushlab turibdi". */
   notice: { id: number; text: string } | null;
+  /** Player whose view we are following (Figma-style), if any. */
+  following: string | null;
+}
+
+export interface Reaction {
+  id: number;
+  playerId: string;
+  emoji: ReactionEmoji;
+  x: number;
+  y: number;
 }
 
 export interface RemoteCursor {
@@ -57,6 +69,13 @@ export interface RemoteCursor {
  */
 export class RoomController {
   readonly cursors = new Map<string, RemoteCursor>();
+  /** Last known visible world rectangle of every other player. */
+  readonly viewports = new Map<string, ViewportPayload>();
+  private readonly reactionListeners = new Set<(reaction: Reaction) => void>();
+  private reactionId = 0;
+  private lastPointer: { x: number; y: number } | null = null;
+  private viewportTimer: number | null = null;
+  private lastViewportSent = 0;
   private snapshot: RoomSnapshot;
   private readonly listeners = new Set<() => void>();
   private socket: GameSocket | null = null;
@@ -94,6 +113,7 @@ export class RoomController {
       progress: { connected: 0, total: 0 },
       completed: null,
       notice: null,
+      following: null,
     };
   }
 
@@ -139,16 +159,30 @@ export class RoomController {
       socket.disconnect();
     });
 
-    socket.on("player:joined", (player) => this.upsertPlayer(player));
+    socket.on("player:joined", (player) => {
+      this.upsertPlayer(player);
+      // Newcomers learn where we are looking right away (minimap / follow).
+      this.sendViewport(true);
+    });
     socket.on("player:updated", (player) => {
       this.upsertPlayer(player);
-      if (!player.connected) this.cursors.delete(player.id);
+      if (!player.connected) {
+        this.cursors.delete(player.id);
+        if (this.snapshot.following === player.id) this.update({ following: null });
+      }
     });
     socket.on("player:left", (playerId) => {
       this.cursors.delete(playerId);
+      this.viewports.delete(playerId);
+      if (this.snapshot.following === playerId) this.update({ following: null });
       this.update({ players: this.snapshot.players.filter((p) => p.id !== playerId) });
     });
     socket.on("cursor", (playerId, x, y) => this.onCursor(playerId, x, y));
+    socket.on("reaction", (playerId, emoji, x, y) => this.showReaction(playerId, emoji, x, y));
+    socket.on("viewport", (playerId, rect) => {
+      this.viewports.set(playerId, rect);
+      if (this.snapshot.following === playerId) this.view?.lookAt(rect);
+    });
     socket.on("piece:grabbed", (groupId, playerId) =>
       this.guard(() => this.onGrabbed(groupId, playerId)),
     );
@@ -179,6 +213,7 @@ export class RoomController {
     this.generation++;
     if (this.moveTimer) window.clearTimeout(this.moveTimer);
     this.stopHoldHeartbeat();
+    if (this.viewportTimer) window.clearTimeout(this.viewportTimer);
     this.socket?.removeAllListeners();
     this.socket?.disconnect();
     this.socket = null;
@@ -196,6 +231,10 @@ export class RoomController {
     return this.view;
   }
 
+  get puzzleState(): PuzzleState | null {
+    return this.state;
+  }
+
   setTools(tools: { ghost: boolean; edgesOnly: boolean }) {
     this.tools = tools;
     this.view?.setGhostVisible(tools.ghost);
@@ -204,6 +243,51 @@ export class RoomController {
 
   arrange() {
     this.socket?.emit("puzzle:arrange");
+  }
+
+  /** Sends a floating emoji from our cursor (or the middle of our view). */
+  react(emoji: ReactionEmoji) {
+    const view = this.view;
+    if (!view) return;
+    const rect = view.viewportRect();
+    const at = this.lastPointer ?? { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+    this.socket?.emit("reaction", { emoji, x: at.x, y: at.y });
+    this.showReaction(this.snapshot.me, emoji, at.x, at.y);
+  }
+
+  onReaction(listener: (reaction: Reaction) => void) {
+    this.reactionListeners.add(listener);
+    return () => {
+      this.reactionListeners.delete(listener);
+    };
+  }
+
+  /** Follow another player's view; pass null (or pan/zoom yourself) to stop. */
+  follow(playerId: string | null) {
+    if (playerId === this.snapshot.me) playerId = null;
+    this.update({ following: playerId });
+    const rect = playerId ? this.viewports.get(playerId) : undefined;
+    if (rect) this.view?.lookAt(rect);
+    else if (playerId) this.notify("Bu o'yinchi hali ekranini siljitmadi");
+  }
+
+  private showReaction(playerId: string, emoji: ReactionEmoji, x: number, y: number) {
+    const reaction = { id: ++this.reactionId, playerId, emoji, x, y };
+    for (const listener of this.reactionListeners) listener(reaction);
+  }
+
+  private sendViewport(immediate = false) {
+    const send = () => {
+      this.viewportTimer = null;
+      const rect = this.view?.viewportRect();
+      if (!rect || !this.socket) return;
+      this.lastViewportSent = performance.now();
+      this.socket.emit("viewport", rect);
+    };
+    if (this.viewportTimer) window.clearTimeout(this.viewportTimer);
+    const wait = immediate ? 0 : 200 - (performance.now() - this.lastViewportSent);
+    if (wait <= 0) send();
+    else this.viewportTimer = window.setTimeout(send, wait);
   }
 
   playerById(id: string): PlayerDTO | undefined {
@@ -319,6 +403,10 @@ export class RoomController {
       onDrag: (groupId, x, y) => this.onLocalDrag(groupId, x, y),
       onDrop: (groupId, x, y) => this.onLocalDrop(groupId, x, y),
       onPointerMove: (x, y) => this.onLocalPointer(x, y),
+      onCameraChange: () => this.sendViewport(),
+      onUserCamera: () => {
+        if (this.snapshot.following) this.update({ following: null });
+      },
     });
     if (generation !== this.generation || this.view) {
       view.destroy();
@@ -333,6 +421,7 @@ export class RoomController {
     this.applyHolders();
     this.reportProgress();
     this.update({ status: "ready" });
+    this.sendViewport(true);
   }
 
   // ---------------------------------------------------------------- local input
@@ -420,6 +509,7 @@ export class RoomController {
   }
 
   private onLocalPointer(x: number, y: number) {
+    this.lastPointer = { x, y };
     const now = performance.now();
     if (now - this.lastCursorSent < CURSOR_SEND_INTERVAL_MS) return;
     this.lastCursorSent = now;

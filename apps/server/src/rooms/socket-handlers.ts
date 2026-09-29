@@ -4,6 +4,8 @@ import {
   GrabPayloadSchema,
   JoinPayloadSchema,
   MovePayloadSchema,
+  ReactionPayloadSchema,
+  ViewportPayloadSchema,
   type ClientToServerEvents,
   type ServerToClientEvents,
 } from "@puzzle/shared";
@@ -110,6 +112,21 @@ export function registerSocketHandlers(
       const data = parse(CursorPayloadSchema, payload);
       const ctx = data && (await current());
       if (ctx) ctx.room.cursor(ctx.playerId, socket.id, data.x, data.y);
+    });
+
+    // Reactions get their own, stricter budget so nobody can flood the room with emoji.
+    const reactions = new TokenBucket(5, 2);
+    socket.on("reaction", async (payload) => {
+      if (!reactions.take()) return;
+      const data = parse(ReactionPayloadSchema, payload);
+      const ctx = data && (await current());
+      if (ctx) ctx.room.reaction(ctx.playerId, socket.id, data);
+    });
+
+    socket.on("viewport", async (payload) => {
+      const data = parse(ViewportPayloadSchema, payload);
+      const ctx = data && (await current());
+      if (ctx) ctx.room.viewport(ctx.playerId, socket.id, data);
     });
 
     socket.on("piece:grab", async (payload, ack) => {
