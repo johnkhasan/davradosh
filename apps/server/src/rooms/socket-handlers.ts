@@ -1,4 +1,5 @@
 import {
+  ChatPayloadSchema,
   CursorPayloadSchema,
   DropPayloadSchema,
   GrabPayloadSchema,
@@ -126,6 +127,15 @@ export function registerSocketHandlers(
       const data = parse(ReactionPayloadSchema, payload);
       const ctx = data && (await current());
       if (ctx) ctx.room.reaction(ctx.playerId, socket.id, data);
+    });
+
+    // Chat gets its own budget: a burst of 5, then one message per second.
+    const chat = new TokenBucket(5, 1);
+    socket.on("chat:send", async (payload) => {
+      if (!chat.take()) return;
+      const data = parse(ChatPayloadSchema, payload);
+      const ctx = data && (await current());
+      if (ctx) ctx.room.chat(ctx.playerId, data.text);
     });
 
     socket.on("viewport", async (payload) => {

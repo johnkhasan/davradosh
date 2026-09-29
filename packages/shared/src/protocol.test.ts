@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { JoinPayloadSchema, sanitizeName, UsernameSchema } from "./protocol";
+import { ChatPayloadSchema, JoinPayloadSchema, sanitizeName, UsernameSchema } from "./protocol";
 
 describe("sanitizeName", () => {
   it("strips control characters, angle brackets and extra whitespace", () => {
@@ -33,5 +33,17 @@ describe("JoinPayloadSchema", () => {
       avatar: "",
     });
     expect(bad.success).toBe(false);
+  });
+});
+
+describe("ChatPayloadSchema", () => {
+  it("cleans and limits chat text", () => {
+    expect(ChatPayloadSchema.parse({ text: "  Salom\u0000‮   hammaga \n " }).text).toBe(
+      "Salom hammaga",
+    );
+    expect(ChatPayloadSchema.safeParse({ text: "   " }).success).toBe(false);
+    expect(ChatPayloadSchema.safeParse({ text: "x".repeat(301) }).success).toBe(false);
+    // Markup is kept as plain text (React escapes it when rendering).
+    expect(ChatPayloadSchema.parse({ text: "<b>hi</b>" }).text).toBe("<b>hi</b>");
   });
 });

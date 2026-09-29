@@ -5,6 +5,7 @@ import {
   type ClientToServerEvents,
   type JoinError,
   type ActionAck,
+  type ChatMessageDTO,
   type PlayerDTO,
   type PlayerRole,
   type PlayerStatsDTO,
@@ -42,6 +43,10 @@ export interface RoomSnapshot {
   notice: { id: number; text: string } | null;
   /** Player whose view we are following (Figma-style), if any. */
   following: string | null;
+  /** Room chat, oldest first. */
+  chat: ChatMessageDTO[];
+  /** Messages from others that arrived while the chat panel was closed. */
+  chatUnread: number;
 }
 
 export interface Reaction {
@@ -120,6 +125,8 @@ export class RoomController {
       completed: null,
       notice: null,
       following: null,
+      chat: [],
+      chatUnread: 0,
     };
   }
 
@@ -216,6 +223,14 @@ export class RoomController {
     });
     socket.on("cursor", (playerId, x, y) => this.onCursor(playerId, x, y));
     socket.on("reaction", (playerId, emoji, x, y) => this.showReaction(playerId, emoji, x, y));
+    socket.on("chat:message", (message) => {
+      const mine = message.playerId === this.snapshot.me;
+      if (!mine) sounds.message();
+      this.update({
+        chat: [...this.snapshot.chat, message].slice(-100),
+        chatUnread: this.chatOpen || mine ? this.snapshot.chatUnread : this.snapshot.chatUnread + 1,
+      });
+    });
     socket.on("viewport", (playerId, rect) => {
       this.viewports.set(playerId, rect);
       if (this.snapshot.following === playerId) this.view?.lookAt(rect);
@@ -351,6 +366,21 @@ export class RoomController {
     return this.action(() => this.socket?.emitWithAck("host:restart"), "Qaytadan boshlab bo'lmadi");
   }
 
+  private chatOpen = false;
+
+  /** The chat panel reports whether it is visible; opening it marks messages as read. */
+  setChatOpen(open: boolean) {
+    this.chatOpen = open;
+    if (open && this.snapshot.chatUnread) this.update({ chatUnread: 0 });
+  }
+
+  sendChat(text: string) {
+    const clean = text.trim();
+    if (!clean) return false;
+    this.socket?.emit("chat:send", { text: clean.slice(0, 300) });
+    return true;
+  }
+
   /** Host only: hand the host role to another connected player. */
   transferHost(playerId: string) {
     return this.action(
@@ -469,6 +499,7 @@ export class RoomController {
     }
 
     this.update({
+      chat: dto.chat,
       room: dto.room,
       players: dto.players,
       me: dto.you,

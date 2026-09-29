@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { PLAYER_COLORS } from "./colors";
 import {
+  CHAT_MAX_LENGTH,
   MAX_PLAYERS_PER_ROOM,
   PIECE_COUNT_OPTIONS,
   USERNAME_MAX_LENGTH,
@@ -24,6 +25,22 @@ export function sanitizeName(value: string): string {
     .replace(/\s+/g, " ")
     .trim();
 }
+
+/** Chat text: no control or bidi-override characters, whitespace collapsed. */
+export function sanitizeChat(value: string): string {
+  return value
+    .replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2060-\u206f]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export const ChatPayloadSchema = z.object({
+  text: z
+    .string()
+    .max(CHAT_MAX_LENGTH * 2)
+    .transform(sanitizeChat)
+    .pipe(z.string().min(1).max(CHAT_MAX_LENGTH)),
+});
 
 export const UsernameSchema = z
   .string()
@@ -149,6 +166,16 @@ export interface PlayerStatsDTO {
   merges: number;
 }
 
+export interface ChatMessageDTO {
+  id: string;
+  playerId: string;
+  /** Name and colour at the time of writing, so messages of people who left still render. */
+  name: string;
+  color: string;
+  text: string;
+  at: number;
+}
+
 export interface RoomStateDTO {
   room: RoomInfoDTO;
   puzzle: PuzzleSnapshot;
@@ -156,6 +183,8 @@ export interface RoomStateDTO {
   locks: Record<number, string>;
   players: PlayerDTO[];
   stats: Record<string, PlayerStatsDTO>;
+  /** Recent chat, oldest first. */
+  chat: ChatMessageDTO[];
   you: string;
 }
 
@@ -184,6 +213,7 @@ export interface ServerToClientEvents {
   cursor: (playerId: string, x: number, y: number) => void;
   reaction: (playerId: string, emoji: ReactionEmoji, x: number, y: number) => void;
   viewport: (playerId: string, rect: ViewportPayload) => void;
+  "chat:message": (message: ChatMessageDTO) => void;
   "piece:grabbed": (groupId: number, playerId: string) => void;
   "piece:released": (groupId: number) => void;
   "piece:moved": (groupId: number, x: number, y: number) => void;
@@ -202,6 +232,7 @@ export interface ClientToServerEvents {
   "cursor:move": (payload: CursorPayload) => void;
   reaction: (payload: ReactionPayload) => void;
   viewport: (payload: ViewportPayload) => void;
+  "chat:send": (payload: { text: string }) => void;
   "piece:grab": (payload: GrabPayload, ack: (result: GrabAck) => void) => void;
   "piece:move": (payload: MovePayload) => void;
   "piece:drop": (payload: DropPayload) => void;

@@ -27,6 +27,7 @@ import { RoomController, type RoomError } from "@/lib/realtime/room-controller";
 import { VoiceController } from "@/lib/realtime/voice-controller";
 import { cn } from "@/lib/utils";
 import { CursorLayer } from "./cursor-layer";
+import { ChatButton, ChatPanel } from "./chat-panel";
 import { PeopleButton, PeoplePanel, ViewerBanner } from "./people-panel";
 import { Minimap } from "./minimap";
 import { ReactionBar, ReactionLayer } from "./reactions";
@@ -86,6 +87,8 @@ function RoomScreen({
 }) {
   const [controller] = useState(() => new RoomController(roomId, identity, watchOnly));
   const [peopleOpen, setPeopleOpen] = useState(false);
+  // Chat and the people panel share the same corner, so only one is open at a time.
+  const [chatOpen, setChatOpen] = useState(false);
   const snapshot = useSyncExternalStore(
     controller.subscribe,
     controller.getSnapshot,
@@ -150,6 +153,15 @@ function RoomScreen({
         controller.follow(null);
         setVoiceSettings(false);
       }
+      // Enter opens the chat (only when no button or link has focus, so it never double-fires).
+      if (
+        e.key === "Enter" &&
+        (document.activeElement === document.body || e.target instanceof HTMLCanvasElement)
+      ) {
+        e.preventDefault();
+        setPeopleOpen(false);
+        setChatOpen(true);
+      }
       if (!e.repeat && (e.key === "m" || e.key === "M")) void voice.toggleMic();
       if (!e.repeat && (e.key === "v" || e.key === "V")) void voice.toggleCam();
       if (e.key === "t" || e.key === "T") void voice.pushToTalk(true);
@@ -211,10 +223,21 @@ function RoomScreen({
             {seatedPlayers.filter((p) => p.connected).length}/
             {room?.maxPlayers ?? MAX_PLAYERS_PER_ROOM}
           </span>
+          <ChatButton
+            unread={snapshot.chatUnread}
+            open={chatOpen}
+            onClick={() => {
+              setPeopleOpen(false);
+              setChatOpen((v) => !v);
+            }}
+          />
           <PeopleButton
             viewers={viewerCount}
             open={peopleOpen}
-            onClick={() => setPeopleOpen((v) => !v)}
+            onClick={() => {
+              setChatOpen(false);
+              setPeopleOpen((v) => !v);
+            }}
           />
           <InviteButton />
         </div>
@@ -229,6 +252,7 @@ function RoomScreen({
           holding={holding}
           voice={voice}
           voiceSnapshot={voiceSnapshot}
+          chat={snapshot.chat}
         />
         <VideoBubbles
           voice={voice}
@@ -381,6 +405,15 @@ function RoomScreen({
             clientId={identity.clientId}
             onClose={() => setVoiceSettings(false)}
             notify={(text) => controller.notify(text)}
+          />
+        )}
+
+        {chatOpen && (
+          <ChatPanel
+            controller={controller}
+            messages={snapshot.chat}
+            me={me}
+            onClose={() => setChatOpen(false)}
           />
         )}
 

@@ -1,10 +1,12 @@
 import {
+  CHAT_HISTORY_SIZE,
   HOST_HANDOFF_MS,
   LOCK_TIMEOUT_MS,
   MAX_VIEWERS_PER_ROOM,
   PuzzleState,
   SEAT_RESERVATION_MS,
   type ActionAck,
+  type ChatMessageDTO,
   type DropPayload,
   type GrabAck,
   type JoinError,
@@ -67,6 +69,9 @@ export class Room {
   private readonly locks = new Map<number, Lock>();
   private stats: Record<string, PlayerStatsDTO>;
   private readonly banned: Set<string>;
+  /** Recent chat, kept in memory only (a chat is about the current session). */
+  private readonly chatLog: ChatMessageDTO[] = [];
+  private chatSeq = 0;
   /** Public id of the current host (starts as the creator, can move). */
   private hostPlayerId: string;
   /** Since when the host has been away (null while connected). */
@@ -376,6 +381,25 @@ export class Room {
     this.emit.others(socketId, "cursor", playerId, x, y);
   }
 
+  /** Adds a (already validated) chat message; players and viewers may both write. */
+  chat(playerId: string, text: string): ChatMessageDTO | null {
+    const player = this.players.get(playerId);
+    if (!player) return null;
+    const message: ChatMessageDTO = {
+      id: `${this.now().toString(36)}-${(this.chatSeq++).toString(36)}`,
+      playerId,
+      name: player.dto.name,
+      color: player.dto.color,
+      text,
+      at: this.now(),
+    };
+    this.chatLog.push(message);
+    if (this.chatLog.length > CHAT_HISTORY_SIZE)
+      this.chatLog.splice(0, this.chatLog.length - CHAT_HISTORY_SIZE);
+    this.emit.all("chat:message", message);
+    return message;
+  }
+
   reaction(playerId: string, socketId: string, { emoji, x, y }: ReactionPayload) {
     this.emit.others(socketId, "reaction", playerId, emoji, x, y);
   }
@@ -512,6 +536,7 @@ export class Room {
       locks,
       players: [...this.players.values()].map((p) => p.dto),
       stats: structuredClone(this.stats),
+      chat: [...this.chatLog],
       you: playerId,
     };
   }

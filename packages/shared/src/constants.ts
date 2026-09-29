@@ -11,6 +11,10 @@ export type PieceCountOption = (typeof PIECE_COUNT_OPTIONS)[number];
 export const USERNAME_MIN_LENGTH = 2;
 export const USERNAME_MAX_LENGTH = 20;
 
+export const CHAT_MAX_LENGTH = 300;
+/** Messages kept per room (shown to people who join later). */
+export const CHAT_HISTORY_SIZE = 50;
+
 /** Rooms are deleted this long after creation. */
 export const ROOM_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 

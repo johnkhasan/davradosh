@@ -1,7 +1,7 @@
 "use client";
 
-import type { PlayerDTO } from "@puzzle/shared";
-import { useEffect, useRef } from "react";
+import type { ChatMessageDTO, PlayerDTO } from "@puzzle/shared";
+import { useEffect, useRef, useState } from "react";
 import type { RoomController } from "@/lib/realtime/room-controller";
 import type { VoiceController, VoiceSnapshot } from "@/lib/realtime/voice-controller";
 
@@ -14,6 +14,30 @@ interface CursorLayerProps {
   holding: Record<string, number>;
   voice?: VoiceController | null;
   voiceSnapshot?: VoiceSnapshot | null;
+  /** Room chat; a new message shows for a few seconds under its author's cursor. */
+  chat?: ChatMessageDTO[];
+}
+
+const CHAT_BUBBLE_MS = 5000;
+
+/** Latest message per player that is still fresh enough to show next to their cursor. */
+function useCursorMessages(chat: ChatMessageDTO[] | undefined) {
+  const [now, setNow] = useState(() => Date.now());
+  const latest = chat?.at(-1);
+  // Re-render once when the newest bubble should disappear.
+  useEffect(() => {
+    if (!latest) return;
+    const left = latest.at + CHAT_BUBBLE_MS - Date.now();
+    if (left <= 0) return;
+    const timer = window.setTimeout(() => setNow(Date.now()), left + 50);
+    return () => window.clearTimeout(timer);
+  }, [latest]);
+  const fresh = new Map<string, string>();
+  for (const message of chat ?? []) {
+    if (Math.max(now, message.at) - message.at < CHAT_BUBBLE_MS)
+      fresh.set(message.playerId, message.text);
+  }
+  return fresh;
 }
 
 /**
@@ -29,7 +53,9 @@ export function CursorLayer({
   holding,
   voice,
   voiceSnapshot,
+  chat,
 }: CursorLayerProps) {
+  const cursorMessages = useCursorMessages(chat);
   const nodes = useRef(new Map<string, HTMLDivElement>());
   const pills = useRef(new Map<string, HTMLSpanElement>());
   const others = players.filter((p) => p.id !== me && p.connected);
@@ -129,6 +155,14 @@ export function CursorLayer({
             {holding[player.id] !== undefined && <span>🧩</span>}
             {micLive && !micLive[player.id] && <span className="opacity-80">🔇</span>}
           </span>
+          {cursorMessages.has(player.id) && (
+            <span
+              className="absolute top-11 left-3.5 w-max max-w-56 rounded-2xl rounded-tl-md bg-surface px-3 py-1.5 text-sm break-words text-foreground shadow-soft-md motion-safe:animate-[pop_160ms_ease-out]"
+              style={{ boxShadow: `0 0 0 2px ${player.color}` }}
+            >
+              {cursorMessages.get(player.id)}
+            </span>
+          )}
           {faces?.has(player.id) && voice && (
             <CursorFace voice={voice} player={player} trackKey={voiceSnapshot!.cameras.join(",")} />
           )}

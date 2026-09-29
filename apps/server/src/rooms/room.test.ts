@@ -461,3 +461,25 @@ describe("Room host hand-off", () => {
     expect(joined.ok && joined.state.players[0]?.isHost).toBe(true);
   });
 });
+
+describe("Room chat", () => {
+  it("broadcasts messages with the author's name and keeps recent history for newcomers", () => {
+    const spy = spyEmitter();
+    const room = new Room(record(), spy.emitter);
+    room.join(player(1, "Aziz"), "s1");
+    for (let i = 0; i < 55; i++) room.chat(pid(1), `xabar ${i}`);
+    expect(spy.events("chat:message")).toHaveLength(55);
+    expect(spy.events("chat:message")[0]).toMatchObject({
+      to: "all",
+      args: [{ name: "Aziz", text: "xabar 0" }],
+    });
+
+    const late = room.join(player(2), "s2");
+    const chat = late.ok ? late.state.chat : [];
+    expect(chat).toHaveLength(50);
+    expect(chat[0]?.text).toBe("xabar 5");
+    expect(chat.at(-1)?.text).toBe("xabar 54");
+    // Unknown senders are ignored.
+    expect(room.chat("nobody", "hi")).toBeNull();
+  });
+});

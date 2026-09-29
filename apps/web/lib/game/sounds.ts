@@ -67,6 +67,10 @@ export const sounds = {
     tone(740, 0.2, "triangle", 0.05);
     setTimeout(() => tone(554, 0.32, "triangle", 0.045), 150);
   },
+  /** A chat message from someone else: a soft, short "pop". */
+  message() {
+    tone(880, 0.07, "sine", 0.05, 1100);
+  },
   complete() {
     [523, 659, 784, 1047].forEach((f, i) =>
       setTimeout(() => tone(f, 0.35, "triangle", 0.09), i * 110),
