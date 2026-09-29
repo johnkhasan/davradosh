@@ -121,7 +121,9 @@ function Gallery({
           ))}
         </div>
       )}
-      <div className="grid max-h-[52vh] grid-cols-2 gap-2 overflow-y-auto pr-1 sm:grid-cols-3">
+      {/* Padding (offset by the negative margin) leaves room for the selection ring,
+          which the scroll container would otherwise clip. */}
+      <div className="-m-1.5 grid max-h-[52vh] grid-cols-2 gap-2 overflow-y-auto p-1.5 sm:grid-cols-3">
         {!data &&
           Array.from({ length: 9 }, (_, i) => (
             <div key={i} className="aspect-[4/3] animate-pulse rounded-control bg-surface-muted" />
