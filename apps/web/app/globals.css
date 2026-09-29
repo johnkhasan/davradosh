@@ -238,3 +238,11 @@ body {
     animation-duration: 2.4s;
   }
 }
+
+/* Landing page game cursor (see GameCursor): hide the system one while it runs. */
+@media (pointer: fine) {
+  html.game-cursor,
+  html.game-cursor * {
+    cursor: none !important;
+  }
+}

@@ -10,6 +10,7 @@ import {
   Users,
 } from "lucide-react";
 import Link from "next/link";
+import { GameCursor } from "@/components/landing/game-cursor";
 import { HeroDemo } from "@/components/landing/hero-demo";
 import { ServerStatus } from "@/components/server-status";
 
@@ -67,6 +68,7 @@ const FEATURES = [
 export default function Home() {
   return (
     <div className="flex min-h-dvh flex-col">
+      <GameCursor />
       <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-5">
         <Link href="/" className="font-display text-xl font-bold">
           🧩 Puzzle
