@@ -1,40 +1,29 @@
-# Production stack on the VPS (/opt/puzzle). The web app runs on Vercel.
+# Production stack on the VPS (/srv/puzzle). The web app runs on Vercel.
 #   docker compose pull && docker compose up -d
 #
-# Caddy and LiveKit use the host network (Caddy proxies to 127.0.0.1, LiveKit
-# needs thousands of UDP ports); the game server is only published on
-# 127.0.0.1:4000 and PostgreSQL is not published at all.
+# TLS and routing are done by the VPS's shared nginx (hsbch-nginx-1), which
+# reaches the game server as `puzzle-server:4000` on the shared proxy network
+# and LiveKit's signalling on the Docker bridge gateway (see nginx/puzzle.conf).
 name: puzzle
 
 services:
-  caddy:
-    image: caddy:2
-    restart: unless-stopped
-    network_mode: host
-    environment:
-      ACME_EMAIL: ${ACME_EMAIL:-}
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - /var/lib/puzzle/uploads:/srv/uploads:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      - server
-
   server:
     image: ${SERVER_IMAGE:-ghcr.io/johnkhasan/puzzle-server:latest}
+    container_name: puzzle-server
     restart: unless-stopped
     env_file: .env
     environment:
       NODE_ENV: production
       PORT: "4000"
       UPLOAD_DIR: /app/uploads
-      SERVE_UPLOADS: "false"
+      # Uploaded images are served by the app (immutable, CORS-readable).
+      SERVE_UPLOADS: "true"
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-    ports:
-      - "127.0.0.1:4000:4000"
     volumes:
-      - /var/lib/puzzle/uploads:/app/uploads
+      - /srv/puzzle/uploads:/app/uploads
+    networks:
+      - default
+      - proxy
     depends_on:
       postgres:
         condition: service_healthy
@@ -45,6 +34,7 @@ services:
 
   postgres:
     image: postgres:16-alpine
+    container_name: puzzle-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -62,10 +52,11 @@ services:
         limits:
           memory: 512m
 
-  # Voice and video (SFU). Signalling on 127.0.0.1:7880 behind Caddy,
-  # media on UDP 50000-60000, TCP 7881 fallback, TURN on UDP 3478.
+  # Voice and video (SFU): host network for the UDP port range. Signalling
+  # listens on 127.0.0.1 and the proxy network's gateway only (livekit.yaml).
   livekit:
     image: livekit/livekit-server:v1.13
+    container_name: puzzle-livekit
     restart: unless-stopped
     network_mode: host
     command: --config /etc/livekit.yaml
@@ -78,7 +69,12 @@ services:
         limits:
           memory: 1g
 
+networks:
+  default:
+  # The shared reverse proxy's network (hsbch-nginx-1).
+  proxy:
+    name: ${PROXY_NETWORK:-hsbch_default}
+    external: true
+
 volumes:
-  caddy_data:
-  caddy_config:
   pg_data:

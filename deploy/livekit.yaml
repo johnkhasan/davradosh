@@ -1,8 +1,10 @@
 # LiveKit SFU for voice/video. API keys come from LIVEKIT_KEYS (docker-compose).
 port: 7880
-# Signalling is only reachable through Caddy (TLS on rtc.puzzle.javohir.ru).
+# Signalling is not public: nginx (in Docker) reaches it via the proxy
+# network's gateway and terminates TLS for rtc.puzzle.javohir.ru.
 bind_addresses:
   - 127.0.0.1
+  - 172.18.0.1
 rtc:
   tcp_port: 7881
   port_range_start: 50000

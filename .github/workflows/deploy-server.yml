@@ -102,8 +102,8 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          source: "deploy/docker-compose.yml,deploy/Caddyfile,deploy/livekit.yaml,deploy/backup.sh"
-          target: /opt/puzzle
+          source: "deploy/docker-compose.yml,deploy/livekit.yaml,deploy/backup.sh"
+          target: /srv/puzzle
           strip_components: 1
 
       - name: Roll out
@@ -115,7 +115,7 @@ jobs:
           envs: IMAGE
           script: |
             set -e
-            cd /opt/puzzle
+            cd /srv/puzzle
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
             PREVIOUS=$(docker compose images server --format json 2>/dev/null | grep -o '"Tag":"[^"]*"' | head -1 | cut -d'"' -f4 || true)
             export SERVER_IMAGE="$IMAGE:${{ github.sha }}"

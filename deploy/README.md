@@ -1,134 +1,125 @@
 # Deploy qo'llanmasi
 
-| Qism                      | Qayerda             | Manzil                        |
-| ------------------------- | ------------------- | ----------------------------- |
-| Frontend (Next.js)        | Vercel              | https://puzzle.javohir.ru     |
-| API + WebSocket + rasmlar | VPS, Docker Compose | https://api.puzzle.javohir.ru |
-| Ovoz/video (LiveKit)      | VPS, Docker Compose | wss://rtc.puzzle.javohir.ru   |
+| Qism                      | Qayerda                      | Manzil                        |
+| ------------------------- | ---------------------------- | ----------------------------- |
+| Frontend (Next.js)        | Vercel                       | https://puzzle.javohir.ru     |
+| API + WebSocket + rasmlar | VPS, `/srv/puzzle` (Compose) | https://api.puzzle.javohir.ru |
+| Ovoz/video (LiveKit)      | VPS, `/srv/puzzle` (Compose) | wss://rtc.puzzle.javohir.ru   |
 
-## 1. DNS (javohir.ru panelida)
+VPS'da 80/443 portlarni umumiy `hsbch-nginx-1` konteyneri boshqaradi (boshqa
+loyihalar ham shu orqali ishlaydi). Puzzle unga ikkita `server` bloki bilan ulanadi:
+[`nginx/puzzle.conf`](./nginx/puzzle.conf).
 
-| Tur   | Nom          | Qiymat                         |
-| ----- | ------------ | ------------------------------ |
-| CNAME | `puzzle`     | `cname.vercel-dns.com`         |
-| A     | `api.puzzle` | `207.180.200.230`              |
-| AAAA  | `api.puzzle` | `2a02:c207:2333:7193::1`       |
-| A     | `rtc.puzzle` | `207.180.200.230` (ovoz/video) |
-| AAAA  | `rtc.puzzle` | `2a02:c207:2333:7193::1`       |
-
-Tekshirish: `dig +short api.puzzle.javohir.ru` → `207.180.200.230`.
-
-## 2. VPS tayyorgarligi (bir marta)
-
-```bash
-# 80/443 band emasligini tekshiring (band bo'lsa, o'sha proxy'ga yangi host qo'shiladi)
-sudo ss -tulpn | grep -E ':(80|443)\s'
-
-# Swap 4 GB (hozir swap yo'q)
-sudo fallocate -l 4G /swapfile && sudo chmod 600 /swapfile
-sudo mkswap /swapfile && sudo swapon /swapfile
-echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
-echo 'vm.swappiness=10' | sudo tee /etc/sysctl.d/99-swap.conf && sudo sysctl --system
-
-# Firewall
-sudo ufw default deny incoming && sudo ufw default allow outgoing
-sudo ufw allow 22/tcp && sudo ufw allow 80/tcp && sudo ufw allow 443/tcp && sudo ufw allow 443/udp
-# LiveKit (ovoz/video): WebRTC media, TCP fallback, TURN
-sudo ufw allow 50000:60000/udp && sudo ufw allow 7881/tcp && sudo ufw allow 3478/udp
-sudo ufw enable
-
-# Docker (rasmiy skript) va deploy foydalanuvchisi
-curl -fsSL https://get.docker.com | sudo sh
-sudo adduser --disabled-password --gecos "" deploy
-sudo usermod -aG docker deploy
-sudo apt-get install -y fail2ban unattended-upgrades
-
-# Papkalar
-sudo mkdir -p /opt/puzzle /var/lib/puzzle/uploads /var/backups/puzzle
-sudo chown -R deploy:deploy /opt/puzzle /var/backups/puzzle
-# Server konteyneri "app" foydalanuvchisi (UID 10001) nomidan yozadi
-sudo chown -R 10001:10001 /var/lib/puzzle/uploads
-
-# Log rotatsiyasi
-echo '{"log-driver":"json-file","log-opts":{"max-size":"10m","max-file":"3"}}' | sudo tee /etc/docker/daemon.json
-sudo systemctl restart docker
+```
+Internet ─▶ hsbch-nginx-1 (443, TLS) ─┬─ api.puzzle ─▶ puzzle-server:4000  (hsbch_default tarmog'i)
+                                      └─ rtc.puzzle ─▶ 172.18.0.1:7880     (puzzle-livekit, host tarmog'i)
+puzzle-server ─▶ puzzle-postgres (ichki tarmoq)
+WebRTC media: UDP 50000–60000, TCP 7881, TURN UDP 3478 (to'g'ridan-to'g'ri LiveKit'ga)
 ```
 
-## 3. Sozlamalar
+## 1. DNS
+
+| Tur   | Nom          | Qiymat                   |
+| ----- | ------------ | ------------------------ |
+| CNAME | `puzzle`     | `cname.vercel-dns.com`   |
+| A     | `api.puzzle` | `207.180.200.230`        |
+| AAAA  | `api.puzzle` | `2a02:c207:2333:7193::1` |
+| A     | `rtc.puzzle` | `207.180.200.230`        |
+| AAAA  | `rtc.puzzle` | `2a02:c207:2333:7193::1` |
+
+## 2. Server tayyorgarligi (bir marta, root)
 
 ```bash
-sudo -iu deploy
-cd /opt/puzzle
-# deploy/.env.example ni shu yerga .env nomi bilan ko'chiring va to'ldiring
-nano .env && chmod 600 .env
-# Kuchli parol: openssl rand -base64 32
+# Swap 4 GB
+fallocate -l 4G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
+echo '/swapfile none swap sw 0 0' >> /etc/fstab
+echo 'vm.swappiness=10' > /etc/sysctl.d/99-swap.conf && sysctl --system
+
+# Papkalar (server konteyneri UID 10001 nomidan yozadi)
+mkdir -p /srv/puzzle/uploads /var/backups/puzzle
+chown deploy:deploy /srv/puzzle /var/backups/puzzle
+chown 10001:10001 /srv/puzzle/uploads
+
+# Sozlamalar: deploy/.env.example → /srv/puzzle/.env (parollar: openssl rand -hex 32)
+chmod 600 /srv/puzzle/.env && chown deploy:deploy /srv/puzzle/.env
 ```
 
-## 4. GitHub Actions orqali avtomatik deploy
-
-Repo → **Settings → Secrets and variables → Actions**:
-
-| Tur      | Nom              | Qiymat                                          |
-| -------- | ---------------- | ----------------------------------------------- |
-| Secret   | `VPS_HOST`       | `207.180.200.230`                               |
-| Secret   | `VPS_USER`       | `deploy`                                        |
-| Secret   | `VPS_SSH_KEY`    | `deploy` foydalanuvchisining private SSH kaliti |
-| Variable | `DEPLOY_ENABLED` | `true`                                          |
-
-SSH kalit yaratish (o'z kompyuteringizda):
+## 3. TLS sertifikat va nginx
 
 ```bash
-ssh-keygen -t ed25519 -f ~/.ssh/puzzle_deploy -C "github-actions"
-ssh-copy-id -i ~/.ssh/puzzle_deploy.pub deploy@207.180.200.230
-cat ~/.ssh/puzzle_deploy   # → VPS_SSH_KEY
+# Ikkala nom bitta sertifikatda (port 80 challenge'ni umumiy nginx beradi)
+certbot certonly --webroot -w /srv/certbot-webroot \
+  -d api.puzzle.javohir.ru -d rtc.puzzle.javohir.ru --cert-name puzzle.javohir.ru
+
+mkdir -p /srv/hsbch/certs/puzzle.javohir.ru
+install -m 644 /etc/letsencrypt/live/puzzle.javohir.ru/fullchain.pem /srv/hsbch/certs/puzzle.javohir.ru/
+install -m 600 /etc/letsencrypt/live/puzzle.javohir.ru/privkey.pem   /srv/hsbch/certs/puzzle.javohir.ru/
 ```
 
-Shundan keyin `main` ga har push (server yoki shared o'zgarganda):
+Yangilanishda nusxalash uchun `/etc/letsencrypt/renewal-hooks/deploy/hsbch-nginx-certs.sh`
+dagi `case` ga qo'shing:
 
-1. Docker image build qilinadi → `ghcr.io/johnkhasan/puzzle-server:<sha>`
-2. `docker-compose.yml`, `Caddyfile`, `backup.sh` VPS'ga ko'chiriladi
-3. `docker compose pull && up -d`, keyin `/health` tekshiriladi, xato bo'lsa oldingi versiyaga qaytadi
+```sh
+  */puzzle.javohir.ru)
+    DEST=/srv/hsbch/certs/puzzle.javohir.ru
+    ;;
+```
 
-Qo'lda birinchi ishga tushirish:
+nginx bloklarini qo'shish (avval backup, keyin tekshiruv, keyin reload):
 
 ```bash
-cd /opt/puzzle
-docker compose up -d
+cp /srv/hsbch/nginx.conf /srv/hsbch/nginx.conf.bak-$(date +%s)
+cat /srv/puzzle/nginx/puzzle.conf >> /srv/hsbch/nginx.conf
+docker exec hsbch-nginx-1 nginx -t && docker exec hsbch-nginx-1 nginx -s reload
+```
+
+## 4. Ishga tushirish
+
+```bash
+cd /srv/puzzle
+docker compose pull && docker compose up -d
 curl https://api.puzzle.javohir.ru/health   # {"status":"ok","db":true,...}
 ```
 
-## 5. Vercel (frontend)
+## 5. GitHub Actions orqali avtomatik deploy
 
-1. vercel.com → **Add New Project** → `johnkhasan/puzzle-game`
-2. **Root Directory:** `apps/web` (framework avtomatik: Next.js, pnpm)
-3. **Environment Variables** (Production va Preview):
-   - `NEXT_PUBLIC_API_URL` = `https://api.puzzle.javohir.ru`
-   - `NEXT_PUBLIC_WS_URL` = `wss://api.puzzle.javohir.ru`
-4. **Settings → Domains:** `puzzle.javohir.ru` qo'shing
+Repo → **Settings → Secrets and variables → Actions**:
 
-`apps/web/vercel.json` dagi `ignoreCommand` faqat web yoki shared o'zgarganda build qiladi.
+| Tur      | Nom              | Qiymat                                              |
+| -------- | ---------------- | --------------------------------------------------- |
+| Secret   | `VPS_HOST`       | `207.180.200.230`                                   |
+| Secret   | `VPS_USER`       | `deploy`                                            |
+| Secret   | `VPS_SSH_KEY`    | `deploy` foydalanuvchisiga qo'shilgan private kalit |
+| Variable | `DEPLOY_ENABLED` | `true`                                              |
 
-## 6. Ovoz/video tekshiruvi
+`main` ga har push (server yoki shared o'zgarganda): image build → Postgres bilan
+smoke test → GHCR'ga push → `docker-compose.yml`, `livekit.yaml`, `backup.sh`
+`/srv/puzzle` ga ko'chiriladi → `docker compose up -d` → `/health` tekshiruvi,
+xato bo'lsa oldingi versiyaga qaytadi.
 
-- `https://livekit.io/connection-test` sahifasida `wss://rtc.puzzle.javohir.ru` va token bilan ulanishni sinab ko'ring
-  (token: room'ga kirib, brauzer DevTools → Network → `rtc-token` javobidan)
-- `.env` da `LIVEKIT_*` bo'sh bo'lsa, ovoz o'chiq bo'ladi va o'yin odatdagidek ishlayveradi
+## 6. Vercel (frontend)
+
+- Root Directory: `apps/web`
+- Environment: `NEXT_PUBLIC_API_URL=https://api.puzzle.javohir.ru`,
+  `NEXT_PUBLIC_WS_URL=wss://api.puzzle.javohir.ru`
+- Domain: `puzzle.javohir.ru`
 
 ## 7. Backup va monitoring
 
 ```bash
-crontab -e
-# 0 3 * * * /opt/puzzle/backup.sh >> /var/log/puzzle-backup.log 2>&1
+crontab -u deploy -e
+# 0 3 * * * /srv/puzzle/backup.sh >> /srv/puzzle/backup.log 2>&1
 ```
 
-- Uptime: UptimeRobot/BetterStack'da `https://api.puzzle.javohir.ru/health` ni kuzating
-- Loglar: `docker compose logs -f server`
+Uptime: `https://api.puzzle.javohir.ru/health` (masalan, mavjud Uptime Kuma'ga qo'shing).
 
 ## Foydali buyruqlar
 
 ```bash
-docker compose ps                     # holat
-docker compose logs -f server caddy   # loglar
-docker compose restart server         # qayta ishga tushirish
-docker compose exec postgres psql -U puzzle puzzle   # baza
+cd /srv/puzzle
+docker compose ps
+docker compose logs -f server livekit
+docker compose restart server
+docker compose exec postgres psql -U puzzle puzzle
+tail -f /var/log/nginx/puzzle.error.log   # hsbch-nginx-1 ichida: docker exec hsbch-nginx-1 tail ...
 ```
