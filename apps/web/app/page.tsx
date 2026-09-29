@@ -121,10 +121,41 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="relative">
+          {/* Hovering (or focusing / tapping) the demo reveals the three steps as a popup. */}
+          <div
+            tabIndex={0}
+            aria-describedby="hero-howto"
+            className="group relative rounded-[28px] focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-4 focus-visible:outline-none"
+          >
             <div className="absolute inset-4 -z-10 rounded-[40px] bg-gradient-to-br from-primary/25 via-snap/15 to-success/20 blur-3xl" />
             <div className="table-felt overflow-hidden rounded-[28px] p-4 shadow-soft-lg sm:p-8">
               <HeroDemo />
+            </div>
+            <div
+              id="hero-howto"
+              role="tooltip"
+              className="pointer-events-none absolute inset-x-4 bottom-4 translate-y-2 rounded-2xl border border-border bg-surface/95 p-5 opacity-0 shadow-soft-lg backdrop-blur transition duration-200 group-focus-within:pointer-events-auto group-focus-within:translate-y-0 group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 motion-reduce:transition-none sm:inset-x-8 sm:bottom-8"
+            >
+              <p className="font-display text-lg font-bold">Qanday o&apos;ynaladi?</p>
+              <ol className="mt-3 space-y-3">
+                {STEPS.map((step, i) => (
+                  <li key={step.title} className="flex gap-3">
+                    <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary-soft text-sm font-bold text-primary">
+                      {i + 1}
+                    </span>
+                    <div className="text-sm">
+                      <p className="font-semibold">{step.title}</p>
+                      <p className="text-muted">{step.text}</p>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+              <Link
+                href="/create"
+                className="mt-4 inline-flex rounded-control bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+              >
+                Boshlash
+              </Link>
             </div>
           </div>
         </section>

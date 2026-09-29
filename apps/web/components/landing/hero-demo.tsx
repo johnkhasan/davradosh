@@ -20,7 +20,10 @@ const PLAYERS = [
 const STEP = 0.9;
 const CARRY = 0.75;
 const HOLD = 2.2;
-const CYCLE = COLS * ROWS * STEP + CARRY + HOLD;
+const FADE = 0.4;
+/** Pieces wait scattered for a moment after fading in, before the first one is picked up. */
+const LEAD = 0.6;
+const CYCLE = LEAD + COLS * ROWS * STEP + CARRY + HOLD;
 
 /** SVG path in absolute picture coordinates (offset by the piece's cell). */
 function toSvgPath(path: PathCommand[], ox: number, oy: number) {
@@ -75,7 +78,7 @@ export function HeroDemo() {
         ty: shape.row * PH,
         sx: sx!,
         sy: sy!,
-        start: index * STEP,
+        start: LEAD + index * STEP,
         owner: index % PLAYERS.length,
         rot: ((index * 37) % 30) - 15,
       };
@@ -103,7 +106,8 @@ export function HeroDemo() {
       const t = reduced ? CYCLE - HOLD / 2 : ((now - begin) / 1000) % CYCLE;
       const dt = Math.min(100, now - last);
       last = now;
-      const fade = t > CYCLE - 0.4 ? (CYCLE - t) / 0.4 : 1;
+      // Fade out the finished picture and fade the scattered pieces back in, so the loop restarts smoothly.
+      const fade = reduced ? 1 : Math.min(1, t / FADE, (CYCLE - t) / FADE);
 
       const positions = new Map<number, { x: number; y: number; p: number }>();
       for (const piece of pieces) {
