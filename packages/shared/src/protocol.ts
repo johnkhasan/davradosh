@@ -44,6 +44,8 @@ export const JoinPayloadSchema = z.object({
   name: UsernameSchema,
   color: ColorSchema,
   avatar: AvatarSchema,
+  /** "viewer" to only watch; players are made viewers automatically when the room is full. */
+  role: z.enum(["player", "viewer"]).default("player"),
 });
 export const CursorPayloadSchema = z.object({ x: Coordinate, y: Coordinate });
 
@@ -80,6 +82,8 @@ export const CreateRoomSchema = z.object({
 });
 
 export type JoinPayload = z.infer<typeof JoinPayloadSchema>;
+/** What clients send (role is optional and defaults to "player"). */
+export type JoinRequest = z.input<typeof JoinPayloadSchema>;
 export type CursorPayload = z.infer<typeof CursorPayloadSchema>;
 export type ReactionPayload = z.infer<typeof ReactionPayloadSchema>;
 export type ViewportPayload = z.infer<typeof ViewportPayloadSchema>;
@@ -90,6 +94,19 @@ export type CreateRoomInput = z.input<typeof CreateRoomSchema>;
 
 // ------------------------------------------------------------------ DTOs
 
+/** Players take a seat and move pieces; viewers only watch (and listen). */
+export type PlayerRole = "player" | "viewer";
+export const PlayerRoleSchema = z.enum(["player", "viewer"]);
+
+export const KickPayloadSchema = z.object({
+  playerId: z.string().min(1).max(64),
+  ban: z.boolean().default(false),
+});
+export const SetRolePayloadSchema = z.object({
+  playerId: z.string().min(1).max(64),
+  role: PlayerRoleSchema,
+});
+
 export interface PlayerDTO {
   id: string;
   name: string;
@@ -97,6 +114,7 @@ export interface PlayerDTO {
   avatar: string;
   connected: boolean;
   isHost: boolean;
+  role: PlayerRole;
 }
 
 export interface ImageDTO {
@@ -121,6 +139,8 @@ export interface RoomInfoDTO {
   image: ImageDTO;
   status: "PLAYING" | "COMPLETED";
   createdAt: number;
+  /** When the current round started (reset by the host's restart). */
+  startedAt: number;
   completedAt: number | null;
 }
 
@@ -138,7 +158,13 @@ export interface RoomStateDTO {
   you: string;
 }
 
-export type JoinError = "not_found" | "full" | "invalid";
+export type JoinError = "not_found" | "full" | "invalid" | "banned";
+
+/** Result of host actions and seat requests. */
+export type ActionAck =
+  { ok: true } | { ok: false; error: "not_host" | "not_found" | "full" | "invalid" };
+
+export type KickReason = "other-tab" | "host";
 
 export type JoinAck = { ok: true; state: RoomStateDTO } | { ok: false; error: JoinError };
 
@@ -164,11 +190,13 @@ export interface ServerToClientEvents {
   "piece:snapped": (result: RemoteSnap) => void;
   "groups:moved": (moves: Array<{ id: number; x: number; y: number }>) => void;
   "puzzle:completed": (info: { durationMs: number; stats: Record<string, PlayerStatsDTO> }) => void;
-  kicked: () => void;
+  kicked: (reason: KickReason) => void;
+  /** The host restarted the puzzle: clients reload the room state. */
+  "puzzle:reset": () => void;
 }
 
 export interface ClientToServerEvents {
-  "room:join": (payload: JoinPayload, ack: (result: JoinAck) => void) => void;
+  "room:join": (payload: JoinRequest, ack: (result: JoinAck) => void) => void;
   "room:sync": (ack: (state: RoomStateDTO | null) => void) => void;
   "cursor:move": (payload: CursorPayload) => void;
   reaction: (payload: ReactionPayload) => void;
@@ -177,4 +205,17 @@ export interface ClientToServerEvents {
   "piece:move": (payload: MovePayload) => void;
   "piece:drop": (payload: DropPayload) => void;
   "puzzle:arrange": () => void;
+  /** A viewer asks for a free seat. */
+  "seat:claim": (ack: (result: ActionAck) => void) => void;
+  /** A player gives up their seat and keeps watching. */
+  "seat:leave": (ack: (result: ActionAck) => void) => void;
+  "host:kick": (
+    payload: z.input<typeof KickPayloadSchema>,
+    ack: (result: ActionAck) => void,
+  ) => void;
+  "host:set-role": (
+    payload: z.input<typeof SetRolePayloadSchema>,
+    ack: (result: ActionAck) => void,
+  ) => void;
+  "host:restart": (ack: (result: ActionAck) => void) => void;
 }

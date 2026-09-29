@@ -3,6 +3,8 @@ import {
   DropPayloadSchema,
   GrabPayloadSchema,
   JoinPayloadSchema,
+  KickPayloadSchema,
+  SetRolePayloadSchema,
   MovePayloadSchema,
   ReactionPayloadSchema,
   ViewportPayloadSchema,
@@ -14,6 +16,7 @@ import type { Server, Socket } from "socket.io";
 import type { z } from "zod";
 import { TokenBucket } from "../lib/rate-limit";
 import type { RoomEmitter } from "./room";
+import type { VoiceService } from "../rtc/voice";
 import type { RoomManager } from "./room-manager";
 
 interface SocketData {
@@ -56,6 +59,7 @@ export function registerSocketHandlers(
   io: GameServer,
   manager: RoomManager,
   logger: FastifyBaseLogger,
+  voice: VoiceService | null = null,
 ) {
   io.on("connection", (socket: GameSocket) => {
     // ~25 cursor + ~25 drag updates per second, with room for bursts.
@@ -92,7 +96,7 @@ export function registerSocketHandlers(
       if (result.replacedSocketId && result.replacedSocketId !== socket.id) {
         // Same player opened the room in another tab: the new tab wins.
         const old = io.sockets.sockets.get(result.replacedSocketId);
-        old?.emit("kicked");
+        old?.emit("kicked", "other-tab");
         old?.disconnect(true);
       }
       socket.data.roomId = data.roomId;
@@ -155,7 +159,67 @@ export function registerSocketHandlers(
     socket.on("puzzle:arrange", async () => {
       if (!bucket.take()) return;
       const ctx = await current();
-      ctx?.room.arrange();
+      ctx?.room.arrange(ctx.playerId);
+    });
+
+    // ------------------------------------------------------------ seats & host actions
+
+    const invalid = { ok: false as const, error: "invalid" as const };
+
+    // Voice rights follow the role, so a role change drops the LiveKit session
+    // and the client reconnects with a fresh token.
+    const changeOwnRole = async (change: "claimSeat" | "leaveSeat") => {
+      const ctx = bucket.take() && (await current());
+      if (!ctx) return invalid;
+      const before = ctx.room.player(ctx.playerId)?.role;
+      const result = ctx.room[change](ctx.playerId);
+      if (result.ok && ctx.room.player(ctx.playerId)?.role !== before) {
+        void voice?.removeParticipant(ctx.room.id, ctx.playerId);
+      }
+      return result;
+    };
+
+    socket.on("seat:claim", async (ack) => {
+      if (typeof ack === "function") ack(await changeOwnRole("claimSeat"));
+    });
+
+    socket.on("seat:leave", async (ack) => {
+      if (typeof ack === "function") ack(await changeOwnRole("leaveSeat"));
+    });
+
+    socket.on("host:kick", async (payload, ack) => {
+      if (typeof ack !== "function") return;
+      const data = parse(KickPayloadSchema, payload);
+      const ctx = data && (await current());
+      if (!ctx) return ack(invalid);
+      const { socketId, ...result } = ctx.room.kick(ctx.playerId, data.playerId, data.ban);
+      if (result.ok) {
+        if (socketId) io.sockets.sockets.get(socketId)?.disconnect(true);
+        void voice?.removeParticipant(ctx.room.id, data.playerId);
+        logger.info({ roomId: ctx.room.id, target: data.playerId, ban: data.ban }, "player kicked");
+        if (data.ban) void manager.save(ctx.room);
+      }
+      ack(result);
+    });
+
+    socket.on("host:set-role", async (payload, ack) => {
+      if (typeof ack !== "function") return;
+      const data = parse(SetRolePayloadSchema, payload);
+      const ctx = data && (await current());
+      if (!ctx) return ack(invalid);
+      const result = ctx.room.setRole(ctx.playerId, data.playerId, data.role);
+      // Voice rights depend on the role: drop the LiveKit session so it reconnects with new ones.
+      if (result.ok) void voice?.removeParticipant(ctx.room.id, data.playerId);
+      ack(result);
+    });
+
+    socket.on("host:restart", async (ack) => {
+      if (typeof ack !== "function") return;
+      const ctx = bucket.take() && (await current());
+      if (!ctx) return ack(invalid);
+      const result = ctx.room.restart(ctx.playerId);
+      if (result.ok) void manager.save(ctx.room);
+      ack(result);
     });
 
     socket.on("disconnect", async () => {

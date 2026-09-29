@@ -43,7 +43,9 @@ function record(overrides: Partial<RoomRecord> = {}): RoomRecord {
     },
     stats: null,
     createdAt: new Date(0),
+    startedAt: new Date(0),
     completedAt: null,
+    banned: [],
     expiresAt: new Date(Date.now() + 1e9),
     ...overrides,
   };
@@ -57,6 +59,7 @@ const player = (n: number, name = `Player ${n}`): JoinPayload => ({
   name,
   color: "#6C5CE7",
   avatar: "🦊",
+  role: "player",
 });
 
 describe("Room", () => {
@@ -71,20 +74,25 @@ describe("Room", () => {
   });
 
   describe("seats", () => {
-    it("allows at most maxPlayers (5) players", () => {
+    it("seats at most maxPlayers (5) players; the 6th joins as a viewer", () => {
       for (let n = 1; n <= 5; n++) expect(room.join(player(n), `s${n}`).ok).toBe(true);
-      expect(room.join(player(6), "s6")).toEqual({ ok: false, error: "full" });
+      const sixth = room.join(player(6), "s6");
+      expect(sixth.ok && sixth.state.players.find((p) => p.id === pid(6))?.role).toBe("viewer");
+      expect(room.occupiedSeats).toBe(5);
     });
 
     it("keeps a disconnected player's seat reserved, then frees it", () => {
       for (let n = 1; n <= 5; n++) room.join(player(n), `s${n}`);
       room.disconnect(pid(1), "s1");
-      expect(room.join(player(6), "s6").ok).toBe(false);
+      const early = room.join(player(6), "s6");
+      expect(early.ok && early.state.players.find((p) => p.id === pid(6))?.role).toBe("viewer");
+      expect(room.claimSeat(pid(6))).toEqual({ ok: false, error: "full" });
 
       now += SEAT_RESERVATION_MS;
       room.sweep();
       expect(spy.events("player:left")).toHaveLength(1);
-      expect(room.join(player(6), "s6").ok).toBe(true);
+      expect(room.claimSeat(pid(6))).toEqual({ ok: true });
+      expect(room.player(pid(6))?.role).toBe("player");
     });
 
     it("lets a player reconnect into their reserved seat", () => {
@@ -254,5 +262,95 @@ describe("Room privacy", () => {
     expect(serialized).not.toContain(player(1).clientId);
     expect(serialized).not.toContain(player(2).clientId);
     expect(first.ok && first.state.you).toBe(pid(1));
+  });
+});
+
+describe("Room viewers and host actions", () => {
+  let now: number;
+  let spy: ReturnType<typeof spyEmitter>;
+  let room: Room;
+  const host = (): JoinPayload => ({ ...player(1, "Host"), clientId: "host_client" });
+  const hostId = publicPlayerId("host_client");
+
+  beforeEach(() => {
+    now = 1_000_000;
+    spy = spyEmitter();
+    room = new Room(record({ maxPlayers: 3 }), spy.emitter, { now: () => now });
+    room.join(host(), "h");
+    room.join(player(2), "s2");
+    room.join(player(3), "s3");
+  });
+
+  const roleOf = (id: string) => room.player(id)?.role;
+
+  it("makes the 4th person a viewer who can watch but not play", () => {
+    const fourth = room.join(player(4), "s4");
+    expect(fourth.ok).toBe(true);
+    expect(roleOf(pid(4))).toBe("viewer");
+    expect(room.grab(pid(4), "s4", 0)).toEqual({ ok: false });
+    room.cursor(pid(4), "s4", 1, 2);
+    expect(spy.events("cursor")).toHaveLength(0);
+    // Reactions from viewers are fine.
+    room.reaction(pid(4), "s4", { emoji: "👏", x: 0, y: 0 });
+    expect(spy.events("reaction")).toHaveLength(1);
+  });
+
+  it("lets people choose to watch, and viewers leave without keeping a seat", () => {
+    room.join({ ...player(5), role: "viewer" }, "s5");
+    expect(roleOf(pid(5))).toBe("viewer");
+    room.disconnect(pid(5), "s5");
+    expect(room.player(pid(5))).toBeUndefined();
+    expect(spy.events("player:left").at(-1)?.args).toEqual([pid(5)]);
+  });
+
+  it("frees a seat when a player steps back, and a viewer can take it", () => {
+    room.join(player(4), "s4");
+    expect(room.leaveSeat(pid(2))).toEqual({ ok: true });
+    expect(roleOf(pid(2))).toBe("viewer");
+    expect(room.claimSeat(pid(4))).toEqual({ ok: true });
+    expect(roleOf(pid(4))).toBe("player");
+  });
+
+  it("only the host can kick; a ban keeps the player out", () => {
+    expect(room.kick(pid(2), pid(3), false)).toEqual({ ok: false, error: "not_host" });
+    expect(room.kick(hostId, hostId, false)).toEqual({ ok: false, error: "invalid" });
+
+    const result = room.kick(hostId, pid(3), true);
+    expect(result).toEqual({ ok: true, socketId: "s3" });
+    expect(spy.events("kicked")[0]).toMatchObject({ to: "one", socket: "s3", args: ["host"] });
+    expect(room.player(pid(3))).toBeUndefined();
+    expect(room.join(player(3), "s3b")).toEqual({ ok: false, error: "banned" });
+    expect(room.persistable().banned).toEqual([pid(3)]);
+  });
+
+  it("a kick without ban lets the player rejoin", () => {
+    room.grab(pid(2), "s2", 0);
+    room.kick(hostId, pid(2), false);
+    expect(spy.events("piece:released")).toHaveLength(1);
+    expect(room.join(player(2), "s2b").ok).toBe(true);
+  });
+
+  it("the host moves people between players and viewers", () => {
+    room.join(player(4), "s4");
+    expect(room.setRole(hostId, pid(4), "player")).toEqual({ ok: false, error: "full" });
+    expect(room.setRole(hostId, pid(3), "viewer")).toEqual({ ok: true });
+    expect(room.setRole(hostId, pid(4), "player")).toEqual({ ok: true });
+    expect(room.setRole(pid(2), pid(4), "viewer")).toEqual({ ok: false, error: "not_host" });
+    expect([roleOf(pid(3)), roleOf(pid(4))]).toEqual(["viewer", "player"]);
+  });
+
+  it("the host restarts: pieces scrambled again, timer and stats reset", () => {
+    room.grab(pid(2), "s2", 0);
+    room.drop(pid(2), "s2", { groupId: 0, x: 0, y: 0 });
+    expect(room.puzzle.connectedPieceCount()).toBe(1);
+    now += 60_000;
+
+    expect(room.restart(pid(2))).toEqual({ ok: false, error: "not_host" });
+    expect(room.restart(hostId, 123)).toEqual({ ok: true });
+    expect(room.puzzle.connectedPieceCount()).toBe(0);
+    expect(room.puzzle.groupCount).toBe(12);
+    expect(room.info).toMatchObject({ status: "PLAYING", completedAt: null, startedAt: now });
+    expect(room.stateFor(hostId).stats[pid(2)]).toEqual({ merges: 0 });
+    expect(spy.events("puzzle:reset")).toHaveLength(1);
   });
 });

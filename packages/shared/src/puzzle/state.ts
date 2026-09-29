@@ -66,7 +66,11 @@ export class PuzzleState {
   }
 
   /** Fresh puzzle: every piece is its own group, scattered around the board. */
-  static create(config: PuzzleConfig, seed: number): PuzzleState {
+  /**
+   * `scatterSeed` only changes where pieces start (used when the host restarts);
+   * piece shapes always come from the room seed.
+   */
+  static create(config: PuzzleConfig, seed: number, scatterSeed = seed): PuzzleState {
     const count = config.cols * config.rows;
     const groups: GroupState[] = [];
     for (let id = 0; id < count; id++) {
@@ -74,7 +78,7 @@ export class PuzzleState {
     }
     const state = new PuzzleState(config, { groups });
     const ids = groups.map((g) => g.id);
-    state.scatter(ids, createRandom(seed ^ 0x9e3779b9));
+    state.scatter(ids, createRandom(scatterSeed ^ 0x9e3779b9));
     return state;
   }
 

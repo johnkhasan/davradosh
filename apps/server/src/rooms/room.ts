@@ -1,13 +1,16 @@
 import {
   LOCK_TIMEOUT_MS,
+  MAX_VIEWERS_PER_ROOM,
   PuzzleState,
   SEAT_RESERVATION_MS,
+  type ActionAck,
   type DropPayload,
   type GrabAck,
   type JoinError,
   type JoinPayload,
   type MovePayload,
   type PlayerDTO,
+  type PlayerRole,
   type PlayerStatsDTO,
   type ReactionPayload,
   type RoomInfoDTO,
@@ -46,6 +49,8 @@ export type JoinResult =
   | { ok: true; state: RoomStateDTO; replacedSocketId: string | null }
   | { ok: false; error: JoinError };
 
+export type KickResult = ActionAck & { socketId?: string | null };
+
 /**
  * One puzzle room: players, seats, group locks and the authoritative puzzle state.
  * Pure game logic: no sockets, no database, no timers (the manager drives `sweep`).
@@ -57,7 +62,8 @@ export class Room {
   readonly puzzle: PuzzleState;
   private readonly players = new Map<string, PlayerRecord>();
   private readonly locks = new Map<number, Lock>();
-  private readonly stats: Record<string, PlayerStatsDTO>;
+  private stats: Record<string, PlayerStatsDTO>;
+  private readonly banned: Set<string>;
   private readonly now: () => number;
   /** Set whenever the puzzle changes; cleared by the manager after saving. */
   dirty = false;
@@ -82,6 +88,7 @@ export class Room {
       image: record.image,
       status: record.status,
       createdAt: record.createdAt.getTime(),
+      startedAt: record.startedAt.getTime(),
       completedAt: record.completedAt?.getTime() ?? null,
     };
     const config = {
@@ -94,6 +101,7 @@ export class Room {
       ? new PuzzleState(config, record.state)
       : PuzzleState.create(config, record.seed);
     this.stats = record.stats ?? {};
+    this.banned = new Set(record.banned);
     this.lastActiveAt = this.now();
   }
 
@@ -105,11 +113,12 @@ export class Room {
     return count;
   }
 
-  /** Connected players plus seats reserved for recently disconnected ones. */
+  /** Seated players (connected or with a reserved seat). Viewers take no seat. */
   get occupiedSeats(): number {
     const now = this.now();
     let count = 0;
     for (const player of this.players.values()) {
+      if (player.dto.role !== "player") continue;
       if (
         player.dto.connected ||
         (player.disconnectedAt !== null && now - player.disconnectedAt < SEAT_RESERVATION_MS)
@@ -120,10 +129,26 @@ export class Room {
     return count;
   }
 
+  get viewerCount(): number {
+    let count = 0;
+    for (const player of this.players.values()) if (player.dto.role === "viewer") count++;
+    return count;
+  }
+
+  private get hasFreeSeat(): boolean {
+    return this.occupiedSeats < this.info.maxPlayers;
+  }
+
   join(payload: JoinPayload, socketId: string): JoinResult {
     const playerId = publicPlayerId(payload.clientId);
+    if (this.banned.has(playerId)) return { ok: false, error: "banned" };
     const existing = this.players.get(playerId);
     if (existing) {
+      // A returning player keeps their seat; asking to watch gives it up.
+      if (payload.role === "viewer" && existing.dto.role === "player") {
+        this.releaseLocksOf(playerId);
+        existing.dto = { ...existing.dto, role: "viewer" };
+      }
       const replacedSocketId = existing.dto.connected ? existing.socketId : null;
       existing.socketId = socketId;
       existing.disconnectedAt = null;
@@ -139,7 +164,10 @@ export class Room {
       return { ok: true, state: this.stateFor(playerId), replacedSocketId };
     }
 
-    if (this.occupiedSeats >= this.info.maxPlayers) return { ok: false, error: "full" };
+    // A full room still lets people in, as viewers.
+    const role: PlayerRole = payload.role === "player" && this.hasFreeSeat ? "player" : "viewer";
+    if (role === "viewer" && this.viewerCount >= MAX_VIEWERS_PER_ROOM)
+      return { ok: false, error: "full" };
 
     const player: PlayerRecord = {
       socketId,
@@ -151,19 +179,26 @@ export class Room {
         avatar: payload.avatar,
         connected: true,
         isHost: payload.clientId === this.hostId,
+        role,
       },
     };
     this.players.set(playerId, player);
-    this.stats[playerId] ??= { merges: 0 };
+    if (role === "player") this.stats[playerId] ??= { merges: 0 };
     this.lastActiveAt = this.now();
     this.emit.others(socketId, "player:joined", player.dto);
     return { ok: true, state: this.stateFor(playerId), replacedSocketId: null };
   }
 
-  /** Socket closed. The seat stays reserved for SEAT_RESERVATION_MS. */
+  /** Socket closed. A player's seat stays reserved for SEAT_RESERVATION_MS; viewers just leave. */
   disconnect(playerId: string, socketId: string) {
     const player = this.players.get(playerId);
     if (!player || player.socketId !== socketId) return;
+    if (player.dto.role === "viewer" && !player.dto.isHost) {
+      this.players.delete(playerId);
+      this.lastActiveAt = this.now();
+      this.emit.all("player:left", playerId);
+      return;
+    }
     player.socketId = null;
     player.disconnectedAt = this.now();
     player.dto = { ...player.dto, connected: false };
@@ -178,6 +213,92 @@ export class Room {
 
   isCurrentSocket(playerId: string, socketId: string): boolean {
     return this.players.get(playerId)?.socketId === socketId;
+  }
+
+  private isPlaying(playerId: string): boolean {
+    return this.players.get(playerId)?.dto.role === "player";
+  }
+
+  // ---------------------------------------------------------------- seats
+
+  /** A viewer takes a free seat. */
+  claimSeat(playerId: string): ActionAck {
+    const player = this.players.get(playerId);
+    if (!player) return { ok: false, error: "not_found" };
+    if (player.dto.role === "player") return { ok: true };
+    if (!this.hasFreeSeat) return { ok: false, error: "full" };
+    this.setRoleOf(player, "player");
+    return { ok: true };
+  }
+
+  /** A player gives their seat away and keeps watching. */
+  leaveSeat(playerId: string): ActionAck {
+    const player = this.players.get(playerId);
+    if (!player) return { ok: false, error: "not_found" };
+    if (player.dto.role === "player") this.setRoleOf(player, "viewer");
+    return { ok: true };
+  }
+
+  private setRoleOf(player: PlayerRecord, role: PlayerRole) {
+    if (role === "viewer") this.releaseLocksOf(player.dto.id);
+    else this.stats[player.dto.id] ??= { merges: 0 };
+    player.dto = { ...player.dto, role };
+    this.emit.all("player:updated", player.dto);
+  }
+
+  // ---------------------------------------------------------------- host actions
+
+  private isHostPlayer(playerId: string): boolean {
+    return this.players.get(playerId)?.dto.isHost === true;
+  }
+
+  /**
+   * Removes a player (or viewer). With `ban` they cannot come back to this room.
+   * Returns the kicked socket so the transport can disconnect it.
+   */
+  kick(hostId: string, targetId: string, ban: boolean): KickResult {
+    if (!this.isHostPlayer(hostId)) return { ok: false, error: "not_host" };
+    if (targetId === hostId) return { ok: false, error: "invalid" };
+    const target = this.players.get(targetId);
+    if (!target) return { ok: false, error: "not_found" };
+    this.releaseLocksOf(targetId);
+    this.players.delete(targetId);
+    if (ban) {
+      this.banned.add(targetId);
+      this.dirty = true;
+    }
+    if (target.socketId) this.emit.one(target.socketId, "kicked", "host");
+    this.emit.all("player:left", targetId);
+    return { ok: true, socketId: target.socketId };
+  }
+
+  /** Moves someone between players and viewers (e.g. to free a seat for a friend). */
+  setRole(hostId: string, targetId: string, role: PlayerRole): ActionAck {
+    if (!this.isHostPlayer(hostId)) return { ok: false, error: "not_host" };
+    const target = this.players.get(targetId);
+    if (!target) return { ok: false, error: "not_found" };
+    if (target.dto.role === role) return { ok: true };
+    if (role === "player" && !this.hasFreeSeat) return { ok: false, error: "full" };
+    this.setRoleOf(target, role);
+    return { ok: true };
+  }
+
+  /** Scrambles the puzzle again (same picture and piece shapes), clears the timer and stats. */
+  restart(hostId: string, scatterSeed = Math.floor(Math.random() * 2 ** 31)): ActionAck {
+    if (!this.isHostPlayer(hostId)) return { ok: false, error: "not_host" };
+    const fresh = PuzzleState.create(this.puzzle.config, this.info.seed, scatterSeed);
+    this.puzzle.replaceWith(fresh.snapshot());
+    this.locks.clear();
+    this.stats = {};
+    for (const player of this.players.values()) {
+      if (player.dto.role === "player") this.stats[player.dto.id] = { merges: 0 };
+    }
+    this.info.status = "PLAYING";
+    this.info.completedAt = null;
+    this.info.startedAt = this.now();
+    this.dirty = true;
+    this.emit.all("puzzle:reset");
+    return { ok: true };
   }
 
   private uniqueName(requested: string, playerId: string): string {
@@ -196,6 +317,8 @@ export class Room {
   // ---------------------------------------------------------------- cursors & pieces
 
   cursor(playerId: string, socketId: string, x: number, y: number) {
+    // Viewers watch quietly: their cursors are not shown to anyone.
+    if (!this.isPlaying(playerId)) return;
     this.emit.others(socketId, "cursor", playerId, x, y);
   }
 
@@ -208,6 +331,7 @@ export class Room {
   }
 
   grab(playerId: string, socketId: string, groupId: number): GrabAck {
+    if (!this.isPlaying(playerId)) return { ok: false };
     const group = this.puzzle.getGroup(groupId);
     if (!group || group.placed || this.info.status === "COMPLETED") return { ok: false };
     const lock = this.locks.get(groupId);
@@ -266,14 +390,14 @@ export class Room {
       this.info.status = "COMPLETED";
       this.info.completedAt = this.now();
       this.emit.all("puzzle:completed", {
-        durationMs: this.info.completedAt - this.info.createdAt,
+        durationMs: this.info.completedAt - this.info.startedAt,
         stats: this.stats,
       });
     }
   }
 
-  arrange() {
-    if (this.info.status === "COMPLETED") return;
+  arrange(playerId: string) {
+    if (this.info.status === "COMPLETED" || !this.isPlaying(playerId)) return;
     const moved = this.puzzle.arrange({
       edgesFirst: true,
       seed: this.info.seed,
@@ -341,7 +465,9 @@ export class Room {
       state: this.puzzle.snapshot(),
       stats: structuredClone(this.stats),
       status: this.info.status,
+      startedAt: new Date(this.info.startedAt),
       completedAt: this.info.completedAt ? new Date(this.info.completedAt) : null,
+      banned: [...this.banned],
     };
   }
 }

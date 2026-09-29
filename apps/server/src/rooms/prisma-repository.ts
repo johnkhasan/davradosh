@@ -91,7 +91,9 @@ export class PrismaRoomRepository implements RoomRepository {
         state: update.state as unknown as Prisma.InputJsonValue,
         stats: update.stats as unknown as Prisma.InputJsonValue,
         status: update.status,
+        startedAt: update.startedAt,
         completedAt: update.completedAt,
+        banned: update.banned,
       },
     });
   }
@@ -114,8 +116,10 @@ export class PrismaRoomRepository implements RoomRepository {
     state: unknown;
     stats: unknown;
     createdAt: Date;
+    startedAt: Date;
     completedAt: Date | null;
     expiresAt: Date;
+    banned: string[];
   }): RoomRecord {
     return {
       ...row,

@@ -37,7 +37,9 @@ export class MemoryRoomRepository implements RoomRepository {
       status: "PLAYING",
       stats: {},
       createdAt: new Date(),
+      startedAt: new Date(),
       completedAt: null,
+      banned: [],
     };
     this.rooms.set(room.id, structuredClone(record));
     return record;

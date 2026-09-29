@@ -40,7 +40,8 @@ export class VoiceService {
     token.addGrant({
       room: roomId,
       roomJoin: true,
-      canPublish: true,
+      // Viewers can listen and watch; only seated players talk.
+      canPublish: player.role === "player",
       canSubscribe: true,
       canPublishData: false,
       canUpdateOwnMetadata: false,

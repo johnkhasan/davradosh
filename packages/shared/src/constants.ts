@@ -1,5 +1,7 @@
 /** Hard limit of simultaneous players in one puzzle room. Enforced on the server. */
 export const MAX_PLAYERS_PER_ROOM = 5;
+/** Spectators who can watch a full room (they take no seat). */
+export const MAX_VIEWERS_PER_ROOM = 20;
 export const MIN_PLAYERS_PER_ROOM = 2;
 
 /** Piece counts offered in the create wizard. */

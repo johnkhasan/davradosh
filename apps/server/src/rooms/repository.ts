@@ -13,13 +13,16 @@ export interface RoomRecord {
   state: PuzzleSnapshot | null;
   stats: Record<string, PlayerStatsDTO> | null;
   createdAt: Date;
+  startedAt: Date;
   completedAt: Date | null;
   expiresAt: Date;
+  /** Public player ids kicked with a ban. */
+  banned: string[];
 }
 
 export type NewRoom = Omit<
   RoomRecord,
-  "image" | "state" | "stats" | "status" | "createdAt" | "completedAt"
+  "image" | "state" | "stats" | "status" | "createdAt" | "startedAt" | "completedAt" | "banned"
 > & {
   imageId: string;
   state: PuzzleSnapshot;
@@ -29,7 +32,9 @@ export interface RoomStateUpdate {
   state: PuzzleSnapshot;
   stats: Record<string, PlayerStatsDTO>;
   status: "PLAYING" | "COMPLETED";
+  startedAt: Date;
   completedAt: Date | null;
+  banned: string[];
 }
 
 export type NewImage = Required<Pick<ImageDTO, "id" | "url" | "thumbUrl" | "width" | "height">> & {

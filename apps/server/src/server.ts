@@ -87,7 +87,7 @@ export async function createGameServer({ env, repository, checkDb, fetch }: Game
       setHeaders: (reply) => void reply.header("access-control-allow-origin", "*"),
     });
   }
-  registerSocketHandlers(io, manager, app.log);
+  registerSocketHandlers(io, manager, app.log, voice);
 
   return {
     app,

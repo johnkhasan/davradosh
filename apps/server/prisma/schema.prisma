@@ -31,7 +31,11 @@ model Room {
   /// Per-player stats: merges made, pieces placed
   stats       Json?
   createdAt   DateTime   @default(now())
+  /// Start of the current round (the host can restart the puzzle)
+  startedAt   DateTime   @default(now())
   completedAt DateTime?
+  /// Public player ids the host kicked with a ban
+  banned      String[]   @default([])
   expiresAt   DateTime
 
   @@index([expiresAt])

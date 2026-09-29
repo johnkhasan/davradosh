@@ -162,9 +162,11 @@ describe("game server over Socket.IO", () => {
       playerId: publicPlayerId("client_1_abcdef"),
     });
 
-    // Fill the room to 5 and check the 6th is refused.
+    // Fill the room to 5: the 6th person can still watch, as a viewer.
     for (let n = 3; n <= 5; n++) expect((await join(roomId, n)).ack.ok).toBe(true);
-    expect((await join(roomId, 6)).ack).toEqual({ ok: false, error: "full" });
+    const sixth = (await join(roomId, 6)).ack as { ok: true; state: RoomStateDTO };
+    expect(sixth.ok).toBe(true);
+    expect(sixth.state.players.find((p) => p.id === sixth.state.you)?.role).toBe("viewer");
   });
 
   it("returns not_found and invalid errors on join", async () => {
@@ -288,5 +290,48 @@ describe("voice tokens", () => {
     expect(
       (await post(`/api/rooms/${roomId}/rtc/mute-all`, { clientId: "client_8_abcdef" })).status,
     ).toBe(403);
+  });
+});
+
+describe("viewers and host actions over Socket.IO", () => {
+  it("a full room lets newcomers watch; the host can kick and restart", async () => {
+    const res = await fetch(`${url}/api/rooms`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        clientId: "client_20_abcdef",
+        imageId: "demo",
+        pieces: 24,
+        maxPlayers: 2,
+      }),
+    });
+    const { id: roomId } = (await res.json()) as { id: string };
+    const host = await join(roomId, 20);
+    await join(roomId, 21);
+    const viewer = await join(roomId, 22);
+    const viewerState = (viewer.ack as { ok: true; state: RoomStateDTO }).state;
+    expect(viewerState.players.find((p) => p.id === viewerState.you)?.role).toBe("viewer");
+    expect(await viewer.client.emitWithAck("piece:grab", { groupId: 0 })).toEqual({ ok: false });
+    expect(await viewer.client.emitWithAck("seat:claim")).toEqual({ ok: false, error: "full" });
+
+    // Only the host may kick.
+    expect(
+      await viewer.client.emitWithAck("host:kick", {
+        playerId: publicPlayerId("client_21_abcdef"),
+      }),
+    ).toEqual({
+      ok: false,
+      error: "not_host",
+    });
+    const kicked = next(viewer.client, "kicked");
+    expect(
+      await host.client.emitWithAck("host:kick", { playerId: viewerState.you, ban: true }),
+    ).toEqual({ ok: true });
+    expect(await kicked).toEqual(["host"]);
+    expect((await join(roomId, 22)).ack).toEqual({ ok: false, error: "banned" });
+
+    const reset = next(host.client, "puzzle:reset");
+    expect(await host.client.emitWithAck("host:restart")).toEqual({ ok: true });
+    await reset;
   });
 });

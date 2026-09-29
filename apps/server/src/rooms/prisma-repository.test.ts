@@ -54,7 +54,9 @@ describe.skipIf(!url)("PrismaRoomRepository", () => {
       state: { groups: [{ ...state.groups[0]!, x: 0, y: 0, placed: true }] },
       stats: { host_client_1: { merges: 3 } },
       status: "COMPLETED",
+      startedAt: new Date(),
       completedAt: new Date(),
+      banned: ["someone"],
     });
     const loaded = await repo.loadRoom(created.id);
     expect(loaded).toMatchObject({ status: "COMPLETED", stats: { host_client_1: { merges: 3 } } });
