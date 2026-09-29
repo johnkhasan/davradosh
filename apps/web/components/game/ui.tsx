@@ -1,8 +1,33 @@
 "use client";
 
 import { Check, ChevronUp, Maximize, Minimize } from "lucide-react";
-import { type ReactNode, useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
+import {
+  createContext,
+  type ReactNode,
+  useContext,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { cn } from "@/lib/utils";
+
+/**
+ * Where ToolButton tooltips open, set by the toolbar around them:
+ * "top-start"/"top-end" keep tooltips of edge toolbars on screen,
+ * "side" opens them to the right of a vertical toolbar (sm+) and above it on phones.
+ */
+export type TooltipPlacement = "top" | "top-start" | "top-end" | "side";
+const TooltipPlacementContext = createContext<TooltipPlacement>("top");
+export const TooltipPlacementProvider = TooltipPlacementContext.Provider;
+
+const TOOLTIP_PLACEMENT: Record<TooltipPlacement, string> = {
+  top: "bottom-full left-1/2 mb-2 -translate-x-1/2 origin-bottom",
+  "top-start": "bottom-full left-0 mb-2 origin-bottom-left",
+  "top-end": "bottom-full right-0 mb-2 origin-bottom-right",
+  side: "bottom-full left-0 mb-2 origin-bottom-left sm:top-1/2 sm:bottom-auto sm:left-full sm:mb-0 sm:ml-3 sm:-translate-y-1/2 sm:origin-left",
+};
 
 export function ToolButton({
   label,
@@ -17,20 +42,32 @@ export function ToolButton({
   children: ReactNode;
   className?: string;
 }) {
+  const placement = useContext(TooltipPlacementContext);
   return (
     <button
       type="button"
-      title={label}
       aria-label={label}
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        "flex size-10 items-center justify-center rounded-control text-foreground/80 transition-colors hover:bg-surface-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none [&_svg]:size-5",
+        "group/tip relative flex size-10 items-center justify-center rounded-control text-foreground/80 transition-colors hover:bg-surface-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none [&_svg]:size-5",
         active && "bg-primary-soft text-primary hover:bg-primary-soft hover:text-primary",
         className,
       )}
     >
       {children}
+      {/* Custom tooltip instead of `title`: styled, and it appears after 150ms rather than ~1s. */}
+      <span
+        aria-hidden
+        className={cn(
+          "pointer-events-none absolute z-50 scale-95 rounded-lg bg-foreground px-2.5 py-1.5 text-xs font-medium whitespace-nowrap text-background opacity-0 shadow-soft-md transition duration-150",
+          "group-hover/tip:scale-100 group-hover/tip:opacity-100 group-hover/tip:delay-150 group-focus-visible/tip:scale-100 group-focus-visible/tip:opacity-100",
+          "motion-reduce:scale-100 motion-reduce:transition-opacity",
+          TOOLTIP_PLACEMENT[placement],
+        )}
+      >
+        {label}
+      </span>
     </button>
   );
 }

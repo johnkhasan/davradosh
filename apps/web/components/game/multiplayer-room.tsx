@@ -39,6 +39,7 @@ import {
   tableClass,
   TablePicker,
   ToolButton,
+  TooltipPlacementProvider,
   type Table,
 } from "./ui";
 
@@ -289,73 +290,77 @@ function RoomScreen({
 
         {/* While admiring the finished picture only the view controls stay. */}
         {!viewing && (
-          <nav
-            aria-label="Asboblar"
-            className="absolute bottom-3 left-3 z-10 flex flex-row gap-1 rounded-card border border-border bg-surface/95 p-1.5 shadow-soft-md backdrop-blur sm:top-1/2 sm:bottom-auto sm:-translate-y-1/2 sm:flex-col"
-          >
-            <ToolButton
-              label="Asl rasm (Tab ni bosib turing)"
-              active={ghost}
-              onClick={() => setGhost((v) => !v)}
+          <TooltipPlacementProvider value="side">
+            <nav
+              aria-label="Asboblar"
+              className="absolute bottom-3 left-3 z-10 flex flex-row gap-1 rounded-card border border-border bg-surface/95 p-1.5 shadow-soft-md backdrop-blur sm:top-1/2 sm:bottom-auto sm:-translate-y-1/2 sm:flex-col"
             >
-              <Eye />
-            </ToolButton>
-            <ToolButton
-              label="Faqat chekka bo'laklar"
-              active={edgesOnly}
-              onClick={() => setEdgesOnly((v) => !v)}
-            >
-              <Frame />
-            </ToolButton>
-            {!isViewer && (
               <ToolButton
-                label="Bo'laklarni tartiblash (hamma uchun)"
-                onClick={() => controller.arrange()}
+                label="Asl rasm (Tab ni bosib turing)"
+                active={ghost}
+                onClick={() => setGhost((v) => !v)}
               >
-                <LayoutGrid />
+                <Eye />
               </ToolButton>
-            )}
-            <ToolButton
-              label={sound ? "Ovozni o'chirish" : "Ovozni yoqish"}
-              onClick={() => setSound((v) => !v)}
-            >
-              {sound ? <Volume2 /> : <VolumeX />}
-            </ToolButton>
-            {/* Viewers listen only: LiveKit does not let them publish. */}
-            {!isViewer && (
-              <VoiceButtons
-                voice={voice}
-                snapshot={voiceSnapshot}
-                onOpenSettings={() => setVoiceSettings((v) => !v)}
-              />
-            )}
-          </nav>
+              <ToolButton
+                label="Faqat chekka bo'laklar"
+                active={edgesOnly}
+                onClick={() => setEdgesOnly((v) => !v)}
+              >
+                <Frame />
+              </ToolButton>
+              {!isViewer && (
+                <ToolButton
+                  label="Bo'laklarni tartiblash (hamma uchun)"
+                  onClick={() => controller.arrange()}
+                >
+                  <LayoutGrid />
+                </ToolButton>
+              )}
+              <ToolButton
+                label={sound ? "Ovozni o'chirish" : "Ovozni yoqish"}
+                onClick={() => setSound((v) => !v)}
+              >
+                {sound ? <Volume2 /> : <VolumeX />}
+              </ToolButton>
+              {/* Viewers listen only: LiveKit does not let them publish. */}
+              {!isViewer && (
+                <VoiceButtons
+                  voice={voice}
+                  snapshot={voiceSnapshot}
+                  onOpenSettings={() => setVoiceSettings((v) => !v)}
+                />
+              )}
+            </nav>
+          </TooltipPlacementProvider>
         )}
 
-        <div className="absolute right-3 bottom-3 flex items-center gap-1 rounded-card border border-border bg-surface/95 p-1.5 shadow-soft-md backdrop-blur">
-          <TablePicker value={table} onChange={setTable} className="hidden sm:block" />
-          <ToolButton
-            label="Kichiklashtirish (−)"
-            className="hidden sm:flex"
-            onClick={() => controller.puzzleView?.zoomBy(0.8)}
-          >
-            <Minus />
-          </ToolButton>
-          <ToolButton
-            label="Kattalashtirish (+)"
-            className="hidden sm:flex"
-            onClick={() => controller.puzzleView?.zoomBy(1.25)}
-          >
-            <Plus />
-          </ToolButton>
-          <ToolButton
-            label="Hammasini ko'rsatish (F)"
-            onClick={() => controller.puzzleView?.fitToContent()}
-          >
-            <LocateFixed />
-          </ToolButton>
-          <FullscreenButton />
-        </div>
+        <TooltipPlacementProvider value="top-end">
+          <div className="absolute right-3 bottom-3 flex items-center gap-1 rounded-card border border-border bg-surface/95 p-1.5 shadow-soft-md backdrop-blur">
+            <TablePicker value={table} onChange={setTable} className="hidden sm:block" />
+            <ToolButton
+              label="Kichiklashtirish (−)"
+              className="hidden sm:flex"
+              onClick={() => controller.puzzleView?.zoomBy(0.8)}
+            >
+              <Minus />
+            </ToolButton>
+            <ToolButton
+              label="Kattalashtirish (+)"
+              className="hidden sm:flex"
+              onClick={() => controller.puzzleView?.zoomBy(1.25)}
+            >
+              <Plus />
+            </ToolButton>
+            <ToolButton
+              label="Hammasini ko'rsatish (F)"
+              onClick={() => controller.puzzleView?.fitToContent()}
+            >
+              <LocateFixed />
+            </ToolButton>
+            <FullscreenButton />
+          </div>
+        </TooltipPlacementProvider>
 
         <div className="absolute bottom-3 left-1/2 hidden -translate-x-1/2 sm:block">
           <ReactionBar onReact={(emoji) => controller.react(emoji)} />

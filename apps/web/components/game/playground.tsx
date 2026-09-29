@@ -41,6 +41,7 @@ import {
   tableClass,
   TablePicker,
   ToolButton,
+  TooltipPlacementProvider,
   type Table,
 } from "./ui";
 
@@ -248,40 +249,45 @@ export function Playground() {
 
         {/* While admiring the finished picture only the view controls stay. */}
         {!viewing && (
-          <nav
-            aria-label="Asboblar"
-            className="absolute bottom-3 left-3 z-10 flex flex-row gap-1 rounded-card border border-border bg-surface/95 p-1.5 shadow-soft-md backdrop-blur sm:top-1/2 sm:bottom-auto sm:-translate-y-1/2 sm:flex-col"
-          >
-            <ToolButton
-              label="Asl rasm (Tab ni bosib turing)"
-              active={ghost}
-              onClick={() => setGhost((v) => !v)}
+          <TooltipPlacementProvider value="side">
+            <nav
+              aria-label="Asboblar"
+              className="absolute bottom-3 left-3 z-10 flex flex-row gap-1 rounded-card border border-border bg-surface/95 p-1.5 shadow-soft-md backdrop-blur sm:top-1/2 sm:bottom-auto sm:-translate-y-1/2 sm:flex-col"
             >
-              <Eye />
-            </ToolButton>
-            <ToolButton
-              label="Faqat chekka bo'laklar"
-              active={edgesOnly}
-              onClick={() => setEdgesOnly((v) => !v)}
-            >
-              <Frame />
-            </ToolButton>
-            <ToolButton label="Bo'laklarni tartiblash" onClick={() => canvasRef.current?.arrange()}>
-              <LayoutGrid />
-            </ToolButton>
-            <ToolButton label="Rasm yuklash" onClick={() => fileRef.current?.click()}>
-              <ImageUp />
-            </ToolButton>
-            <ToolButton label="Qaytadan boshlash" onClick={restart}>
-              <RotateCcw />
-            </ToolButton>
-            <ToolButton
-              label={sound ? "Ovozni o'chirish" : "Ovozni yoqish"}
-              onClick={() => setSound((v) => !v)}
-            >
-              {sound ? <Volume2 /> : <VolumeX />}
-            </ToolButton>
-          </nav>
+              <ToolButton
+                label="Asl rasm (Tab ni bosib turing)"
+                active={ghost}
+                onClick={() => setGhost((v) => !v)}
+              >
+                <Eye />
+              </ToolButton>
+              <ToolButton
+                label="Faqat chekka bo'laklar"
+                active={edgesOnly}
+                onClick={() => setEdgesOnly((v) => !v)}
+              >
+                <Frame />
+              </ToolButton>
+              <ToolButton
+                label="Bo'laklarni tartiblash"
+                onClick={() => canvasRef.current?.arrange()}
+              >
+                <LayoutGrid />
+              </ToolButton>
+              <ToolButton label="Rasm yuklash" onClick={() => fileRef.current?.click()}>
+                <ImageUp />
+              </ToolButton>
+              <ToolButton label="Qaytadan boshlash" onClick={restart}>
+                <RotateCcw />
+              </ToolButton>
+              <ToolButton
+                label={sound ? "Ovozni o'chirish" : "Ovozni yoqish"}
+                onClick={() => setSound((v) => !v)}
+              >
+                {sound ? <Volume2 /> : <VolumeX />}
+              </ToolButton>
+            </nav>
+          </TooltipPlacementProvider>
         )}
         <input
           ref={fileRef}
@@ -291,27 +297,29 @@ export function Playground() {
           onChange={(e) => void onFile(e.target.files?.[0])}
         />
 
-        <div className="absolute right-3 bottom-3 flex items-center gap-1 rounded-card border border-border bg-surface/95 p-1.5 shadow-soft-md backdrop-blur">
-          <TablePicker value={table} onChange={setTable} className="hidden sm:block" />
-          <ToolButton
-            label="Kichiklashtirish (−)"
-            className="hidden sm:flex"
-            onClick={() => canvasRef.current?.zoomBy(0.8)}
-          >
-            <Minus />
-          </ToolButton>
-          <ToolButton
-            label="Kattalashtirish (+)"
-            className="hidden sm:flex"
-            onClick={() => canvasRef.current?.zoomBy(1.25)}
-          >
-            <Plus />
-          </ToolButton>
-          <ToolButton label="Hammasini ko'rsatish (F)" onClick={() => canvasRef.current?.fit()}>
-            <LocateFixed />
-          </ToolButton>
-          <FullscreenButton />
-        </div>
+        <TooltipPlacementProvider value="top-end">
+          <div className="absolute right-3 bottom-3 flex items-center gap-1 rounded-card border border-border bg-surface/95 p-1.5 shadow-soft-md backdrop-blur">
+            <TablePicker value={table} onChange={setTable} className="hidden sm:block" />
+            <ToolButton
+              label="Kichiklashtirish (−)"
+              className="hidden sm:flex"
+              onClick={() => canvasRef.current?.zoomBy(0.8)}
+            >
+              <Minus />
+            </ToolButton>
+            <ToolButton
+              label="Kattalashtirish (+)"
+              className="hidden sm:flex"
+              onClick={() => canvasRef.current?.zoomBy(1.25)}
+            >
+              <Plus />
+            </ToolButton>
+            <ToolButton label="Hammasini ko'rsatish (F)" onClick={() => canvasRef.current?.fit()}>
+              <LocateFixed />
+            </ToolButton>
+            <FullscreenButton />
+          </div>
+        </TooltipPlacementProvider>
 
         {debug && fps !== null && (
           <span className="absolute top-3 right-3 rounded-md bg-black/60 px-2 py-1 font-mono text-xs text-white">
