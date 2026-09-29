@@ -55,6 +55,10 @@ beforeAll(async () => {
       PUBLIC_UPLOAD_URL: "http://localhost/uploads",
       UNSPLASH_ACCESS_KEY: undefined,
       SERVE_UPLOADS: true,
+      LIVEKIT_URL: "wss://rtc.example.com",
+      LIVEKIT_API_KEY: "test-key",
+      LIVEKIT_API_SECRET: "test-secret-that-is-at-least-32-chars",
+      LIVEKIT_SERVICE_URL: undefined,
     },
     repository: new MemoryRoomRepository(),
     checkDb: async () => true,
@@ -242,5 +246,47 @@ describe("images", () => {
     const second = await importOnce();
     expect(first).toMatchObject({ id: "picsum-10", credit: "Test Author / Unsplash" });
     expect(second.id).toBe(first.id);
+  });
+});
+
+describe("voice tokens", () => {
+  const post = (path: string, body: unknown) =>
+    fetch(`${url}${path}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+  it("issues LiveKit tokens only to players connected to the room", async () => {
+    const roomId = await createRoom();
+    // Not connected yet (the room is not even loaded) → refused.
+    expect(
+      (await post(`/api/rooms/${roomId}/rtc-token`, { clientId: "client_8_abcdef" })).status,
+    ).toBe(404);
+
+    const { ack } = await join(roomId, 8);
+    expect(ack.ok).toBe(true);
+    const res = await post(`/api/rooms/${roomId}/rtc-token`, { clientId: "client_8_abcdef" });
+    expect(res.status).toBe(200);
+    const { url: rtcUrl, token } = (await res.json()) as { url: string; token: string };
+    expect(rtcUrl).toBe("wss://rtc.example.com");
+
+    const claims = JSON.parse(Buffer.from(token.split(".")[1]!, "base64url").toString()) as {
+      sub: string;
+      name: string;
+      video: { room: string; roomJoin: boolean; canPublishData: boolean };
+    };
+    expect(claims.sub).toBe(publicPlayerId("client_8_abcdef"));
+    expect(claims.video).toMatchObject({ room: roomId, roomJoin: true, canPublishData: false });
+    expect(token).not.toContain("client_8_abcdef");
+
+    // Someone who is not in the room cannot get a token.
+    expect(
+      (await post(`/api/rooms/${roomId}/rtc-token`, { clientId: "client_9_abcdef" })).status,
+    ).toBe(403);
+    // Only the host may mute everyone.
+    expect(
+      (await post(`/api/rooms/${roomId}/rtc/mute-all`, { clientId: "client_8_abcdef" })).status,
+    ).toBe(403);
   });
 });

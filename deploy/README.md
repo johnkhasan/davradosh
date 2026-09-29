@@ -4,14 +4,17 @@
 | ------------------------- | ------------------- | ----------------------------- |
 | Frontend (Next.js)        | Vercel              | https://puzzle.javohir.ru     |
 | API + WebSocket + rasmlar | VPS, Docker Compose | https://api.puzzle.javohir.ru |
+| Ovoz/video (LiveKit)      | VPS, Docker Compose | wss://rtc.puzzle.javohir.ru   |
 
 ## 1. DNS (javohir.ru panelida)
 
-| Tur   | Nom          | Qiymat                   |
-| ----- | ------------ | ------------------------ |
-| CNAME | `puzzle`     | `cname.vercel-dns.com`   |
-| A     | `api.puzzle` | `207.180.200.230`        |
-| AAAA  | `api.puzzle` | `2a02:c207:2333:7193::1` |
+| Tur   | Nom          | Qiymat                         |
+| ----- | ------------ | ------------------------------ |
+| CNAME | `puzzle`     | `cname.vercel-dns.com`         |
+| A     | `api.puzzle` | `207.180.200.230`              |
+| AAAA  | `api.puzzle` | `2a02:c207:2333:7193::1`       |
+| A     | `rtc.puzzle` | `207.180.200.230` (ovoz/video) |
+| AAAA  | `rtc.puzzle` | `2a02:c207:2333:7193::1`       |
 
 Tekshirish: `dig +short api.puzzle.javohir.ru` → `207.180.200.230`.
 
@@ -30,6 +33,8 @@ echo 'vm.swappiness=10' | sudo tee /etc/sysctl.d/99-swap.conf && sudo sysctl --s
 # Firewall
 sudo ufw default deny incoming && sudo ufw default allow outgoing
 sudo ufw allow 22/tcp && sudo ufw allow 80/tcp && sudo ufw allow 443/tcp && sudo ufw allow 443/udp
+# LiveKit (ovoz/video): WebRTC media, TCP fallback, TURN
+sudo ufw allow 50000:60000/udp && sudo ufw allow 7881/tcp && sudo ufw allow 3478/udp
 sudo ufw enable
 
 # Docker (rasmiy skript) va deploy foydalanuvchisi
@@ -103,7 +108,13 @@ curl https://api.puzzle.javohir.ru/health   # {"status":"ok","db":true,...}
 
 `apps/web/vercel.json` dagi `ignoreCommand` faqat web yoki shared o'zgarganda build qiladi.
 
-## 6. Backup va monitoring
+## 6. Ovoz/video tekshiruvi
+
+- `https://livekit.io/connection-test` sahifasida `wss://rtc.puzzle.javohir.ru` va token bilan ulanishni sinab ko'ring
+  (token: room'ga kirib, brauzer DevTools → Network → `rtc-token` javobidan)
+- `.env` da `LIVEKIT_*` bo'sh bo'lsa, ovoz o'chiq bo'ladi va o'yin odatdagidek ishlayveradi
+
+## 7. Backup va monitoring
 
 ```bash
 crontab -e

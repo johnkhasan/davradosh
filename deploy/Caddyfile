@@ -1,4 +1,5 @@
 # api.puzzle.javohir.ru → game server (REST + Socket.IO) and uploaded images.
+# rtc.puzzle.javohir.ru → LiveKit signalling (voice/video).
 # Caddy obtains and renews the Let's Encrypt certificate automatically.
 {
 	email {$ACME_EMAIL:admin@javohir.ru}
@@ -22,7 +23,7 @@ api.puzzle.javohir.ru {
 			max_size 12MB
 		}
 		# WebSocket upgrades are proxied automatically.
-		reverse_proxy server:4000
+		reverse_proxy 127.0.0.1:4000
 	}
 
 	header {
@@ -35,5 +36,15 @@ api.puzzle.javohir.ru {
 	log {
 		output stdout
 		format console
+	}
+}
+
+rtc.puzzle.javohir.ru {
+	# LiveKit signalling (WebSocket) and API; media flows over UDP directly.
+	reverse_proxy 127.0.0.1:7880
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		-Server
 	}
 }

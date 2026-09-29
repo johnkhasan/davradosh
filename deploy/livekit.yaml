@@ -1,0 +1,23 @@
+# LiveKit SFU for voice/video. API keys come from LIVEKIT_KEYS (docker-compose).
+port: 7880
+# Signalling is only reachable through Caddy (TLS on rtc.puzzle.javohir.ru).
+bind_addresses:
+  - 127.0.0.1
+rtc:
+  tcp_port: 7881
+  port_range_start: 50000
+  port_range_end: 60000
+  # Discover the public IP via STUN so ICE candidates are reachable.
+  use_external_ip: true
+turn:
+  # Relays media for players behind strict NATs / corporate firewalls.
+  enabled: true
+  domain: rtc.puzzle.javohir.ru
+  udp_port: 3478
+room:
+  # Same limit as the puzzle rooms.
+  max_participants: 5
+  empty_timeout: 300
+  departure_timeout: 20
+logging:
+  level: info

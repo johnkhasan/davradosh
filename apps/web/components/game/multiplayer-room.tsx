@@ -22,10 +22,12 @@ import { IdentityDialog } from "@/components/identity-dialog";
 import { setSoundEnabled } from "@/lib/game/sounds";
 import { loadIdentity, type Identity } from "@/lib/identity";
 import { RoomController, type RoomError } from "@/lib/realtime/room-controller";
+import { VoiceController } from "@/lib/realtime/voice-controller";
 import { cn } from "@/lib/utils";
 import { CursorLayer } from "./cursor-layer";
 import { Minimap } from "./minimap";
 import { ReactionBar, ReactionLayer } from "./reactions";
+import { AudioStartBanner, VideoBubbles, VoiceButtons, VoiceSettings } from "./voice";
 import {
   Avatar,
   formatDuration,
@@ -62,6 +64,17 @@ function RoomScreen({ roomId, identity }: { roomId: string; identity: Identity }
     controller.getSnapshot,
     controller.getSnapshot,
   );
+  const [voice] = useState(
+    () =>
+      new VoiceController({
+        roomId,
+        clientId: identity.clientId,
+        me: () => controller.getSnapshot().me,
+        notify: (text) => controller.notify(text),
+      }),
+  );
+  const voiceSnapshot = useSyncExternalStore(voice.subscribe, voice.getSnapshot, voice.getSnapshot);
+  const [voiceSettings, setVoiceSettings] = useState(false);
   const hostRef = useRef<HTMLDivElement>(null);
   const [ghost, setGhost] = useState(false);
   const [edgesOnly, setEdgesOnly] = useState(false);
@@ -83,6 +96,16 @@ function RoomScreen({ roomId, identity }: { roomId: string; identity: Identity }
   }, [controller]);
 
   useEffect(() => controller.setTools({ ghost, edgesOnly }), [controller, ghost, edgesOnly]);
+
+  // Voice needs a joined puzzle room: the server only gives tokens to connected players.
+  useEffect(() => {
+    if (snapshot.status === "ready") void voice.connect();
+  }, [voice, snapshot.status]);
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "production")
+      (window as unknown as { __voice: unknown }).__voice = voice;
+    return () => voice.destroy();
+  }, [voice]);
   useEffect(() => setSoundEnabled(sound), [sound]);
 
   useEffect(() => {
@@ -95,19 +118,28 @@ function RoomScreen({ roomId, identity }: { roomId: string; identity: Identity }
         e.preventDefault();
         setGhost(true);
       }
-      if (e.key === "Escape") controller.follow(null);
+      if (e.key === "Escape") {
+        controller.follow(null);
+        setVoiceSettings(false);
+      }
+      if (!e.repeat && (e.key === "m" || e.key === "M")) void voice.toggleMic();
+      if (!e.repeat && (e.key === "v" || e.key === "V")) void voice.toggleCam();
+      if (e.key === "t" || e.key === "T") void voice.pushToTalk(true);
       if (e.key === "f" || e.key === "F") view?.fitToContent();
       if (e.key === "+" || e.key === "=") view?.zoomBy(1.25);
       if (e.key === "-" || e.key === "_") view?.zoomBy(0.8);
     };
-    const up = (e: KeyboardEvent) => e.key === "Tab" && setGhost(false);
+    const up = (e: KeyboardEvent) => {
+      if (e.key === "Tab") setGhost(false);
+      if (e.key === "t" || e.key === "T") void voice.pushToTalk(false);
+    };
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
     return () => {
       window.removeEventListener("keydown", down);
       window.removeEventListener("keyup", up);
     };
-  }, [controller]);
+  }, [controller, voice]);
 
   const { room, players, me, status, error, progress, completed, holding, notice, following } =
     snapshot;
@@ -139,6 +171,7 @@ function RoomScreen({ roomId, identity }: { roomId: string; identity: Identity }
             holding={holding}
             following={following}
             onFollow={(id) => controller.follow(following === id ? null : id)}
+            speaking={voiceSnapshot.speaking}
           />
           <span className="text-sm text-muted tabular-nums" title="O'yinchilar">
             {connectedPlayers.length}/{room?.maxPlayers ?? MAX_PLAYERS_PER_ROOM}
@@ -149,7 +182,16 @@ function RoomScreen({ roomId, identity }: { roomId: string; identity: Identity }
 
       <div className={cn("relative flex-1", tableClass(table))}>
         <div ref={hostRef} className="absolute inset-0" />
-        <CursorLayer controller={controller} players={players} me={me} holding={holding} />
+        <CursorLayer
+          controller={controller}
+          players={players}
+          me={me}
+          holding={holding}
+          voice={voice}
+          voiceSnapshot={voiceSnapshot}
+        />
+        <VideoBubbles voice={voice} snapshot={voiceSnapshot} players={players} me={me} />
+        <AudioStartBanner voice={voice} snapshot={voiceSnapshot} />
         <ReactionLayer controller={controller} players={players} />
 
         {followed && (
@@ -226,6 +268,11 @@ function RoomScreen({ roomId, identity }: { roomId: string; identity: Identity }
           >
             {sound ? <Volume2 /> : <VolumeX />}
           </ToolButton>
+          <VoiceButtons
+            voice={voice}
+            snapshot={voiceSnapshot}
+            onOpenSettings={() => setVoiceSettings((v) => !v)}
+          />
         </nav>
 
         <div className="absolute right-3 bottom-3 flex items-center gap-1 rounded-card border border-border bg-surface/95 p-1.5 shadow-soft-md backdrop-blur">
@@ -271,6 +318,18 @@ function RoomScreen({ roomId, identity }: { roomId: string; identity: Identity }
           <Minimap controller={controller} players={players} me={me} />
         </div>
 
+        {voiceSettings && voiceSnapshot.status !== "unavailable" && (
+          <VoiceSettings
+            voice={voice}
+            snapshot={voiceSnapshot}
+            isHost={players.find((p) => p.id === me)?.isHost ?? false}
+            roomId={roomId}
+            clientId={identity.clientId}
+            onClose={() => setVoiceSettings(false)}
+            notify={(text) => controller.notify(text)}
+          />
+        )}
+
         <Notice notice={notice} />
 
         {completed && showCompleted && (
@@ -293,12 +352,14 @@ function PlayerStack({
   holding,
   following,
   onFollow,
+  speaking,
 }: {
   players: PlayerDTO[];
   me: string;
   holding: Record<string, number>;
   following: string | null;
   onFollow: (playerId: string) => void;
+  speaking: Record<string, true>;
 }) {
   const sorted = [...players].sort((a, b) => Number(b.id === me) - Number(a.id === me));
   return (
@@ -318,7 +379,11 @@ function PlayerStack({
               color={player.color}
               avatar={player.avatar}
               dimmed={!player.connected}
-              ring={holding[player.id] !== undefined || following === player.id}
+              ring={
+                holding[player.id] !== undefined ||
+                following === player.id ||
+                Boolean(speaking[player.id])
+              }
             />
           </button>
           {player.isHost && (

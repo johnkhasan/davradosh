@@ -235,6 +235,11 @@ export class RoomController {
     return this.state;
   }
 
+  /** Our pointer in world coordinates (spatial audio, reactions). */
+  get pointer(): { x: number; y: number } | null {
+    return this.lastPointer;
+  }
+
   setTools(tools: { ghost: boolean; edgesOnly: boolean }) {
     this.tools = tools;
     this.view?.setGhostVisible(tools.ghost);
@@ -636,7 +641,7 @@ export class RoomController {
     });
   }
 
-  private notify(text: string) {
+  notify(text: string) {
     this.update({ notice: { id: ++this.noticeId, text } });
   }
 }

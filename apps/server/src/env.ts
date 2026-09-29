@@ -2,11 +2,15 @@ import "dotenv/config";
 import { z } from "zod";
 import { MAX_PLAYERS_PER_ROOM } from "@puzzle/shared";
 
+/** `KEY=` in an .env file means "not set", not an invalid empty value. */
+const unset = <T extends z.ZodType>(schema: T) =>
+  z.preprocess((value) => (value === "" ? undefined : value), schema.optional());
+
 const EnvSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().positive().default(4000),
   /** Optional in development: without it rooms are kept in memory only. */
-  DATABASE_URL: z.string().url().optional(),
+  DATABASE_URL: unset(z.string().url()),
   /** Comma-separated list of allowed browser origins. */
   CORS_ORIGINS: z
     .string()
@@ -25,7 +29,13 @@ const EnvSchema = z.object({
     .default(MAX_PLAYERS_PER_ROOM),
   UPLOAD_DIR: z.string().default("./uploads"),
   PUBLIC_UPLOAD_URL: z.string().url().default("http://localhost:4000/uploads"),
-  UNSPLASH_ACCESS_KEY: z.string().optional(),
+  UNSPLASH_ACCESS_KEY: unset(z.string()),
+  /** LiveKit (voice/video). All three must be set to enable it. */
+  LIVEKIT_URL: unset(z.string().url()),
+  LIVEKIT_API_KEY: unset(z.string().min(3)),
+  LIVEKIT_API_SECRET: unset(z.string().min(32)),
+  /** LiveKit API URL reachable from the server, if different from LIVEKIT_URL. */
+  LIVEKIT_SERVICE_URL: unset(z.string().url()),
   /** Serve UPLOAD_DIR from the app (development). In production Caddy serves the files. */
   SERVE_UPLOADS: z
     .enum(["true", "false"])

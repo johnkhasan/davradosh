@@ -94,6 +94,11 @@ export class RoomManager {
     return pending;
   }
 
+  /** The room if it is currently live in memory (players connected recently). */
+  getLoaded(roomId: string): Room | null {
+    return this.rooms.get(roomId) ?? null;
+  }
+
   /** Room info for link previews, without loading the room into memory. */
   async peek(roomId: string) {
     const room = this.rooms.get(roomId);

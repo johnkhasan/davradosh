@@ -172,6 +172,10 @@ export class Room {
     this.emit.all("player:updated", player.dto);
   }
 
+  player(playerId: string): PlayerDTO | undefined {
+    return this.players.get(playerId)?.dto;
+  }
+
   isCurrentSocket(playerId: string, socketId: string): boolean {
     return this.players.get(playerId)?.socketId === socketId;
   }

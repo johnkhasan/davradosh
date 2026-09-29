@@ -12,6 +12,7 @@
   "dependencies": {
     "@puzzle/shared": "workspace:*",
     "clsx": "^2.1.1",
+    "livekit-client": "^2.22.3",
     "lucide-react": "^1.48.0",
     "motion": "^13.4.5",
     "next": "16.3.6",

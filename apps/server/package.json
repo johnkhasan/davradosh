@@ -22,6 +22,7 @@
     "@puzzle/shared": "workspace:*",
     "dotenv": "^18.0.4",
     "fastify": "^5.12.5",
+    "livekit-server-sdk": "^2.19.1",
     "pg": "^8.23.0",
     "prisma": "7.10.0",
     "sharp": "^0.35.5",

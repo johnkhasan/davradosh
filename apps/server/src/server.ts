@@ -15,6 +15,8 @@ import {
 } from "./rooms/socket-handlers";
 import { imageRoutes } from "./routes/images";
 import { roomRoutes } from "./routes/rooms";
+import { voiceRoutes } from "./routes/voice";
+import { VoiceService } from "./rtc/voice";
 import { createSocketServer } from "./socket";
 
 export interface GameServerDeps {
@@ -27,6 +29,10 @@ export interface GameServerDeps {
     | "PUBLIC_UPLOAD_URL"
     | "UNSPLASH_ACCESS_KEY"
     | "SERVE_UPLOADS"
+    | "LIVEKIT_URL"
+    | "LIVEKIT_API_KEY"
+    | "LIVEKIT_API_SECRET"
+    | "LIVEKIT_SERVICE_URL"
   >;
   repository: RoomRepository;
   checkDb: () => Promise<boolean>;
@@ -58,7 +64,18 @@ export async function createGameServer({ env, repository, checkDb, fetch }: Game
     fetch,
   });
 
+  const voice =
+    env.LIVEKIT_URL && env.LIVEKIT_API_KEY && env.LIVEKIT_API_SECRET
+      ? new VoiceService({
+          url: env.LIVEKIT_URL,
+          apiKey: env.LIVEKIT_API_KEY,
+          apiSecret: env.LIVEKIT_API_SECRET,
+          serviceUrl: env.LIVEKIT_SERVICE_URL,
+        })
+      : null;
+
   await app.register(roomRoutes, { manager });
+  await app.register(voiceRoutes, { manager, voice });
   await app.register(imageRoutes, { store, repository, gallery });
   if (env.SERVE_UPLOADS ?? env.NODE_ENV !== "production") {
     await app.register(fastifyStatic, {

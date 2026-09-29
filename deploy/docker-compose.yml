@@ -1,15 +1,16 @@
 # Production stack on the VPS (/opt/puzzle). The web app runs on Vercel.
 #   docker compose pull && docker compose up -d
+#
+# Caddy and LiveKit use the host network (Caddy proxies to 127.0.0.1, LiveKit
+# needs thousands of UDP ports); the game server is only published on
+# 127.0.0.1:4000 and PostgreSQL is not published at all.
 name: puzzle
 
 services:
   caddy:
     image: caddy:2
     restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
+    network_mode: host
     environment:
       ACME_EMAIL: ${ACME_EMAIL:-}
     volumes:
@@ -30,6 +31,8 @@ services:
       UPLOAD_DIR: /app/uploads
       SERVE_UPLOADS: "false"
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+    ports:
+      - "127.0.0.1:4000:4000"
     volumes:
       - /var/lib/puzzle/uploads:/app/uploads
     depends_on:
@@ -58,6 +61,22 @@ services:
       resources:
         limits:
           memory: 512m
+
+  # Voice and video (SFU). Signalling on 127.0.0.1:7880 behind Caddy,
+  # media on UDP 50000-60000, TCP 7881 fallback, TURN on UDP 3478.
+  livekit:
+    image: livekit/livekit-server:v1.13
+    restart: unless-stopped
+    network_mode: host
+    command: --config /etc/livekit.yaml
+    environment:
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml:ro
+    deploy:
+      resources:
+        limits:
+          memory: 1g
 
 volumes:
   caddy_data:
