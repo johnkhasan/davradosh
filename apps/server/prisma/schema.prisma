@@ -1,0 +1,52 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum RoomStatus {
+  PLAYING
+  COMPLETED
+}
+
+model Room {
+  /// nanoid(8), used in the share link: /room/{id}
+  id          String     @id
+  /// clientId of the player who created the room
+  hostId      String
+  imageId     String
+  image       Image      @relation(fields: [imageId], references: [id])
+  cols        Int
+  rows        Int
+  seed        Int
+  rotation    Boolean    @default(false)
+  /// 2..5, capped by MAX_PLAYERS_PER_ROOM on the server
+  maxPlayers  Int        @default(5)
+  status      RoomStatus @default(PLAYING)
+  /// Snapshot of pieces and groups, written periodically by the game server
+  state       Json?
+  /// Per-player stats: merges made, pieces placed
+  stats       Json?
+  createdAt   DateTime   @default(now())
+  completedAt DateTime?
+  expiresAt   DateTime
+
+  @@index([expiresAt])
+}
+
+model Image {
+  id        String   @id
+  /// "upload" | "unsplash"
+  source    String
+  url       String
+  thumbUrl  String
+  width     Int
+  height    Int
+  /// Attribution text for gallery images
+  credit    String?
+  createdAt DateTime @default(now())
+  rooms     Room[]
+}

@@ -1,0 +1,7 @@
+pnpm-lock.yaml
+.next
+dist
+.turbo
+coverage
+plan.md
+apps/server/src/generated

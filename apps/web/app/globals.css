@@ -1,0 +1,105 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/*
+ * Design tokens. Light theme by default, dark theme via the OS setting
+ * (unless the user forced light) or an explicit data-theme="dark".
+ */
+:root {
+  --background: #faf8f5;
+  --surface: #ffffff;
+  --surface-muted: #f2efea;
+  --foreground: #1c1a24;
+  --muted: #6b6878;
+  --border: #e6e1d8;
+
+  --primary: #6c5ce7;
+  --primary-foreground: #ffffff;
+  --primary-soft: #eeebfd;
+  --success: #ffb020;
+  --snap: #00c2a8;
+  --danger: #e5484d;
+
+  /* Table (play area) backgrounds */
+  --table-wood: #c89b6d;
+  --table-felt: #2f5d50;
+
+  --shadow-sm: 0 1px 2px rgb(28 26 36 / 0.06), 0 1px 1px rgb(28 26 36 / 0.04);
+  --shadow-md: 0 4px 12px rgb(28 26 36 / 0.08), 0 2px 4px rgb(28 26 36 / 0.05);
+  --shadow-lg: 0 16px 40px rgb(28 26 36 / 0.12), 0 4px 12px rgb(28 26 36 / 0.06);
+
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --background: #121019;
+    --surface: #1b1824;
+    --surface-muted: #252131;
+    --foreground: #f1eff7;
+    --muted: #a19db0;
+    --border: #2f2a3d;
+    --primary: #8b7cf6;
+    --primary-soft: #2a2447;
+    --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+    --shadow-md: 0 4px 12px rgb(0 0 0 / 0.4);
+    --shadow-lg: 0 16px 40px rgb(0 0 0 / 0.5);
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --background: #121019;
+  --surface: #1b1824;
+  --surface-muted: #252131;
+  --foreground: #f1eff7;
+  --muted: #a19db0;
+  --border: #2f2a3d;
+  --primary: #8b7cf6;
+  --primary-soft: #2a2447;
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-md: 0 4px 12px rgb(0 0 0 / 0.4);
+  --shadow-lg: 0 16px 40px rgb(0 0 0 / 0.5);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-soft: var(--primary-soft);
+  --color-success: var(--success);
+  --color-snap: var(--snap);
+  --color-danger: var(--danger);
+
+  --font-sans: var(--font-inter);
+  --font-display: var(--font-bricolage);
+
+  --radius-card: 16px;
+  --radius-control: 12px;
+
+  --shadow-soft-sm: var(--shadow-sm);
+  --shadow-soft-md: var(--shadow-md);
+  --shadow-soft-lg: var(--shadow-lg);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-inter), system-ui, sans-serif;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
