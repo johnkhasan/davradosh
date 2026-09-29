@@ -33,6 +33,13 @@ export interface PuzzleSnapshot {
   groups: GroupState[];
 }
 
+export interface HintPair {
+  /** Two neighbouring pieces that fit together. */
+  pieceIds: [number, number];
+  /** Their (different) groups. */
+  groupIds: [number, number];
+}
+
 export interface SnapResult {
   /** Group that survived (and was possibly moved). */
   groupId: number;
@@ -241,6 +248,43 @@ export class PuzzleState {
     const ids = loose.map((g) => g.id);
     this.scatter(ids, createRandom(options.seed ?? 1), { ordered: true });
     return ids;
+  }
+
+  /**
+   * A pair of neighbouring pieces that still belong to different groups: a hint
+   * for "these two fit together". Groups in `exclude` (held by someone) are
+   * skipped; pairs between two loose groups are preferred over pairs that
+   * attach to the board. Returns null when nothing is left to connect.
+   */
+  findHint(
+    options: { exclude?: ReadonlySet<number>; random?: () => number } = {},
+  ): HintPair | null {
+    const { cols, rows } = this.config;
+    const random = options.random ?? Math.random;
+    const loose: HintPair[] = [];
+    const toBoard: HintPair[] = [];
+    for (let pieceId = 0; pieceId < this.pieceCount; pieceId++) {
+      const col = pieceId % cols;
+      const row = Math.floor(pieceId / cols);
+      const right = col < cols - 1 ? pieceId + 1 : -1;
+      const below = row < rows - 1 ? pieceId + cols : -1;
+      for (const other of [right, below]) {
+        if (other < 0) continue;
+        const a = this.pieceToGroup[pieceId]!;
+        const b = this.pieceToGroup[other]!;
+        if (a === b || options.exclude?.has(a) || options.exclude?.has(b)) continue;
+        const groupA = this.groups.get(a)!;
+        const groupB = this.groups.get(b)!;
+        if (groupA.placed && groupB.placed) continue;
+        const pair = {
+          pieceIds: [pieceId, other] as [number, number],
+          groupIds: [a, b] as [number, number],
+        };
+        (groupA.placed || groupB.placed ? toBoard : loose).push(pair);
+      }
+    }
+    const pool = loose.length ? loose : toBoard;
+    return pool.length ? pool[Math.floor(random() * pool.length)]! : null;
   }
 
   isEdgePiece(pieceId: number): boolean {

@@ -55,6 +55,8 @@ interface GroupView {
   holder?: OutlineFilter;
   /** Positions from a remote drag, played back smoothly (see MotionBuffer). */
   remote?: MotionBuffer;
+  /** Pulsing golden outline while this group is part of a hint. */
+  hint?: { filter: OutlineFilter; t: number };
 }
 
 interface DragState {
@@ -79,6 +81,8 @@ interface PanState {
 }
 
 const TWEEN_MS = 140;
+const HINT_MS = 3200;
+const HINT_COLOR = 0xffb020;
 const FLASH_MS = 320;
 
 /** Touch input: fingers are imprecise, so a touch this close to a piece (screen px) still grabs it. */
@@ -353,6 +357,50 @@ export class PuzzleView {
     return this.drag?.groupId ?? null;
   }
 
+  /**
+   * Hint: outlines the groups of two pieces that fit together with a pulsing
+   * golden glow for a few seconds, and moves the camera there if needed.
+   */
+  showHint(pieceIds: [number, number], groupIds: [number, number]) {
+    for (const groupId of groupIds) {
+      const view = this.groups.get(groupId);
+      if (!view) continue;
+      view.hint?.filter.destroy();
+      view.hint = {
+        filter: new OutlineFilter({ thickness: 4, color: HINT_COLOR, quality: 0.2 }),
+        t: 0,
+      };
+      this.updateFilters(view);
+      if (view.container.parent === this.looseLayer) this.looseLayer.addChild(view.container);
+    }
+
+    // Keep both pieces (with some room around them) on screen.
+    const { cols, pieceWidth: pw, pieceHeight: ph } = this.opts.state.config;
+    const rects = pieceIds.map((pieceId) => {
+      const group = this.opts.state.groupOfPiece(pieceId)!;
+      return {
+        x: group.x + (pieceId % cols) * pw,
+        y: group.y + Math.floor(pieceId / cols) * ph,
+      };
+    });
+    const minX = Math.min(...rects.map((r) => r.x)) - pw;
+    const minY = Math.min(...rects.map((r) => r.y)) - ph;
+    const maxX = Math.max(...rects.map((r) => r.x)) + pw * 2;
+    const maxY = Math.max(...rects.map((r) => r.y)) + ph * 2;
+    const view = this.viewportRect();
+    const visible =
+      minX >= view.x &&
+      minY >= view.y &&
+      maxX <= view.x + view.width &&
+      maxY <= view.y + view.height;
+    if (!visible) {
+      const size = Math.max(maxX - minX, maxY - minY, Math.min(pw, ph) * 6);
+      const cx = (minX + maxX) / 2;
+      const cy = (minY + maxY) / 2;
+      this.lookAt({ x: cx - size / 2, y: cy - size / 2, width: size, height: size });
+    }
+  }
+
   /** Recreates every group view from the state (after a full resync). */
   rebuild() {
     this.drag = null;
@@ -484,6 +532,7 @@ export class PuzzleView {
 
   private updateFilters(view: GroupView) {
     const filters = [];
+    if (view.hint) filters.push(view.hint.filter);
     if (view.holder) filters.push(view.holder);
     if (view.flash) filters.push(view.flash.filter);
     view.pieces.filters = filters;
@@ -496,6 +545,7 @@ export class PuzzleView {
     view.pieces.filters = [];
     view.flash?.filter.destroy();
     view.holder?.destroy();
+    view.hint?.filter.destroy();
     view.container.destroy({ children: true });
   }
 
@@ -518,6 +568,17 @@ export class PuzzleView {
       if (view.remote) {
         const pos = view.remote.sample(now);
         if (pos) view.container.position.set(pos.x, pos.y);
+      }
+      if (view.hint) {
+        view.hint.t += dt / HINT_MS;
+        // Three soft pulses that fade out.
+        view.hint.filter.alpha =
+          (0.55 + 0.45 * Math.sin(view.hint.t * Math.PI * 6)) * Math.min(1, (1 - view.hint.t) * 4);
+        if (view.hint.t >= 1) {
+          view.hint.filter.destroy();
+          view.hint = undefined;
+          this.updateFilters(view);
+        }
       }
       if (view.tween) {
         const tween = view.tween;

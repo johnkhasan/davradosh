@@ -10,6 +10,8 @@ export interface PuzzleCanvasHandle {
   fit(): void;
   zoomBy(factor: number): void;
   arrange(): void;
+  /** Highlights two pieces that fit together; false when nothing is left to connect. */
+  hint(): boolean;
 }
 
 export interface PuzzleProgress {
@@ -78,6 +80,14 @@ export function PuzzleCanvas({
       for (const id of state.arrange({ edgesFirst: true, seed }))
         view.syncGroup(id, { animate: true });
       callbacks.current.onChange?.(state.snapshot());
+    },
+    hint: () => {
+      const state = stateRef.current;
+      const view = viewRef.current;
+      const pair = state?.findHint();
+      if (!state || !view || !pair) return false;
+      view.showHint(pair.pieceIds, pair.groupIds);
+      return true;
     },
   }));
 

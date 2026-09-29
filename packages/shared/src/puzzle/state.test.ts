@@ -139,3 +139,41 @@ describe("PuzzleState.applySnap", () => {
     expect(client.applySnap({ groupId: 0, absorbed: [42], x: 0, y: 0, placed: false })).toBe(false);
   });
 });
+
+describe("PuzzleState.findHint", () => {
+  it("suggests two neighbouring pieces from different groups", () => {
+    const state = blank();
+    const hint = state.findHint({ random: () => 0 })!;
+    const [a, b] = hint.pieceIds;
+    const neighbours = Math.abs(a - b) === 1 || Math.abs(a - b) === 4;
+    expect(neighbours).toBe(true);
+    expect(hint.groupIds[0]).not.toBe(hint.groupIds[1]);
+  });
+
+  it("skips groups someone is holding and pieces already joined", () => {
+    const state = blank();
+    state.moveGroup(0, 2000, 2000);
+    state.moveGroup(1, 2000, 2000);
+    state.snap(1); // 0 and 1 are one group now
+    const exclude = new Set([2]);
+    for (let i = 0; i < 20; i++) {
+      const hint = state.findHint({ exclude, random: () => i / 20 })!;
+      expect(hint.pieceIds).not.toEqual([0, 1]);
+      expect(hint.groupIds).not.toContain(2);
+    }
+  });
+
+  it("prefers loose pairs, then pieces next to the board, then nothing", () => {
+    const state = blank();
+    // Place everything except piece 11 on the board.
+    for (let id = 0; id < 11; id++) {
+      state.moveGroup(state.groupOfPiece(id)!.id, 0, 0);
+      state.snap(state.groupOfPiece(id)!.id);
+    }
+    const hint = state.findHint()!;
+    expect(hint.pieceIds).toContain(11);
+    state.moveGroup(state.groupOfPiece(11)!.id, 0, 0);
+    state.snap(state.groupOfPiece(11)!.id);
+    expect(state.findHint()).toBeNull();
+  });
+});

@@ -367,6 +367,34 @@ export class RoomController {
   }
 
   private chatOpen = false;
+  private lastHintAt = 0;
+
+  /**
+   * Local hint: highlights two pieces that fit together (only for you).
+   * Pieces someone is holding are skipped; one hint every few seconds.
+   */
+  hint() {
+    const state = this.state;
+    const view = this.view;
+    if (!state || !view) return;
+    const now = performance.now();
+    if (now - this.lastHintAt < 4000) {
+      this.notify("Keyingi maslahat uchun biroz kuting");
+      return;
+    }
+    const exclude = new Set(this.locks.keys());
+    const pair = state.findHint({ exclude });
+    if (!pair) {
+      this.notify(
+        state.isComplete()
+          ? "Puzzle tayyor! 🎉"
+          : "Hozircha maslahat yo'q: bo'laklarni boshqalar ushlab turibdi",
+      );
+      return;
+    }
+    this.lastHintAt = now;
+    view.showHint(pair.pieceIds, pair.groupIds);
+  }
 
   /** The chat panel reports whether it is visible; opening it marks messages as read. */
   setChatOpen(open: boolean) {

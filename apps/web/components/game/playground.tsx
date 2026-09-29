@@ -11,6 +11,7 @@ import {
   Frame,
   ImageUp,
   LayoutGrid,
+  Lightbulb,
   LocateFixed,
   Minus,
   Plus,
@@ -100,6 +101,7 @@ export function Playground() {
         setGhost(true);
       }
       if (e.key === "f" || e.key === "F") canvasRef.current?.fit();
+      if (!e.repeat && (e.key === "h" || e.key === "H")) canvasRef.current?.hint();
       if (e.key === "+" || e.key === "=") canvasRef.current?.zoomBy(1.25);
       if (e.key === "-" || e.key === "_") canvasRef.current?.zoomBy(0.8);
     };
@@ -273,6 +275,9 @@ export function Playground() {
                 onClick={() => canvasRef.current?.arrange()}
               >
                 <LayoutGrid />
+              </ToolButton>
+              <ToolButton label="Maslahat (H)" onClick={() => canvasRef.current?.hint()}>
+                <Lightbulb />
               </ToolButton>
               <ToolButton label="Rasm yuklash" onClick={() => fileRef.current?.click()}>
                 <ImageUp />

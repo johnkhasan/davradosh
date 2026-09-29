@@ -9,6 +9,7 @@ import {
   X,
   Frame,
   LayoutGrid,
+  Lightbulb,
   LocateFixed,
   Link2,
   Minus,
@@ -166,6 +167,7 @@ function RoomScreen({
       if (!e.repeat && (e.key === "v" || e.key === "V")) void voice.toggleCam();
       if (e.key === "t" || e.key === "T") void voice.pushToTalk(true);
       if (e.key === "f" || e.key === "F") view?.fitToContent();
+      if (!e.repeat && (e.key === "h" || e.key === "H")) controller.hint();
       if (e.key === "+" || e.key === "=") view?.zoomBy(1.25);
       if (e.key === "-" || e.key === "_") view?.zoomBy(0.8);
     };
@@ -341,6 +343,11 @@ function RoomScreen({
                   onClick={() => controller.arrange()}
                 >
                   <LayoutGrid />
+                </ToolButton>
+              )}
+              {!isViewer && (
+                <ToolButton label="Maslahat (H)" onClick={() => controller.hint()}>
+                  <Lightbulb />
                 </ToolButton>
               )}
               <ToolButton
