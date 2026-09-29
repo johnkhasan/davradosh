@@ -9,10 +9,13 @@ import {
   UserRoundCheck,
   Users,
 } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { GameCursor } from "@/components/landing/game-cursor";
 import { HeroDemo } from "@/components/landing/hero-demo";
 import { ServerStatus } from "@/components/server-status";
+import { SITE_URL } from "@/lib/env";
+import { FAQ, jsonLdScript, landingJsonLd, OPEN_GRAPH } from "@/lib/seo";
 
 const STEPS = [
   {
@@ -65,9 +68,18 @@ const FEATURES = [
   },
 ] as const;
 
+export const metadata: Metadata = {
+  alternates: { canonical: "/" },
+  openGraph: { ...OPEN_GRAPH, url: "/" },
+};
+
 export default function Home() {
   return (
     <div className="flex min-h-dvh flex-col">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: jsonLdScript(landingJsonLd()) }}
+      />
       <GameCursor />
       <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-5">
         <Link href="/" className="font-display text-xl font-bold">
@@ -201,6 +213,28 @@ export default function Home() {
             ))}
           </div>
 
+          <div className="mx-auto mt-20 max-w-3xl">
+            <h2 className="text-center font-display text-3xl font-bold sm:text-4xl">
+              Ko&apos;p beriladigan savollar
+            </h2>
+            <div className="mt-8 divide-y divide-border rounded-card border border-border bg-surface">
+              {FAQ.map((item) => (
+                <details key={item.question} className="group px-5 py-4">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-4 font-semibold [&::-webkit-details-marker]:hidden">
+                    <h3>{item.question}</h3>
+                    <span
+                      aria-hidden
+                      className="text-xl text-muted transition-transform group-open:rotate-45"
+                    >
+                      +
+                    </span>
+                  </summary>
+                  <p className="mt-2 text-muted">{item.answer}</p>
+                </details>
+              ))}
+            </div>
+          </div>
+
           <div className="mt-16 flex flex-col items-center gap-5 rounded-[28px] bg-gradient-to-br from-primary to-[#4b3bc9] px-6 py-12 text-center text-white shadow-soft-lg">
             <h2 className="font-display text-3xl font-bold sm:text-4xl">
               Bugun kechqurun birga o&apos;ynaymizmi?
@@ -220,7 +254,9 @@ export default function Home() {
 
       <footer className="border-t border-border">
         <div className="mx-auto flex w-full max-w-6xl flex-col items-center justify-between gap-3 px-4 py-6 text-sm text-muted sm:flex-row">
-          <span>© {new Date().getFullYear()} puzzle.javohir.ru</span>
+          <span>
+            © {new Date().getFullYear()} {new URL(SITE_URL).host}
+          </span>
           <ServerStatus />
         </div>
       </footer>

@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Bricolage_Grotesque, Inter } from "next/font/google";
+import { SITE_URL } from "@/lib/env";
+import { OPEN_GRAPH, SITE_DESCRIPTION, SITE_NAME, SITE_TITLE } from "@/lib/seo";
 import "./globals.css";
 
 const inter = Inter({
@@ -13,13 +15,29 @@ const bricolage = Bricolage_Grotesque({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://puzzle.javohir.ru"),
+  metadataBase: new URL(SITE_URL),
   title: {
-    default: "Puzzle — birga yig'amiz",
+    default: SITE_TITLE,
     template: "%s · Puzzle",
   },
-  description:
-    "Do'stlaringiz bilan bitta puzzle'ni real vaqtda birga yig'ing. Rasm tanlang, link ulashing va boshlang.",
+  description: SITE_DESCRIPTION,
+  applicationName: SITE_NAME,
+  keywords: [
+    "pazl",
+    "pazl onlayn",
+    "puzzle",
+    "puzzle o'yini",
+    "onlayn puzzle",
+    "boshqotirma",
+    "do'stlar bilan o'yin",
+    "multiplayer puzzle",
+    "jigsaw puzzle",
+    "пазлы онлайн",
+  ],
+  category: "games",
+  openGraph: OPEN_GRAPH,
+  twitter: { card: "summary_large_image" },
+  formatDetection: { telephone: false },
 };
 
 export const viewport: Viewport = {
