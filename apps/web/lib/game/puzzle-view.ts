@@ -1,6 +1,7 @@
 import {
   flattenPath,
   generatePieceShapes,
+  MotionBuffer,
   type GroupState,
   type PieceShape,
   type PuzzleState,
@@ -52,6 +53,8 @@ interface GroupView {
   flash?: { t: number; filter: ColorMatrixFilter };
   /** Outline in the colour of the remote player holding this group. */
   holder?: OutlineFilter;
+  /** Positions from a remote drag, played back smoothly (see MotionBuffer). */
+  remote?: MotionBuffer;
 }
 
 interface DragState {
@@ -256,11 +259,26 @@ export class PuzzleView {
     }
   }
 
+  /**
+   * A position from another player's drag. Updates arrive unevenly (especially
+   * from phones on mobile data), so they are buffered and played back smoothly
+   * a little behind real time instead of jumping to each one.
+   */
+  moveRemote(groupId: number, x: number, y: number) {
+    const view = this.groups.get(groupId);
+    if (!view) return;
+    view.tween = undefined;
+    view.remote ??= new MotionBuffer();
+    view.remote.push(x, y, performance.now(), { x: view.container.x, y: view.container.y });
+  }
+
   /** Re-reads one group from the state (after a local or remote move). */
   syncGroup(groupId: number, opts: { animate?: boolean; duration?: number } = {}) {
     const group = this.opts.state.getGroup(groupId);
     const view = this.groups.get(groupId);
     if (!group || !view) return;
+    // An explicit position (drop, arrange, resync) ends any remote-drag playback.
+    view.remote = undefined;
     if (opts.animate) this.tweenTo(view, group.x, group.y, opts.duration);
     else {
       view.tween = undefined;
@@ -279,6 +297,7 @@ export class PuzzleView {
     view.shadows.removeChildren();
     view.pieces.removeChildren();
     this.attachPieces(view, survivor.pieceIds);
+    view.remote = undefined;
     for (const absorbedId of result.absorbed) {
       const absorbed = this.groups.get(absorbedId);
       if (!absorbed) continue;
@@ -494,7 +513,12 @@ export class PuzzleView {
       if (tween.t >= 1) this.cameraTween = null;
       this.applyCamera();
     }
+    const now = performance.now();
     for (const view of this.groups.values()) {
+      if (view.remote) {
+        const pos = view.remote.sample(now);
+        if (pos) view.container.position.set(pos.x, pos.y);
+      }
       if (view.tween) {
         const tween = view.tween;
         tween.t = Math.min(1, tween.t + dt / tween.duration);
@@ -817,6 +841,9 @@ export class PuzzleView {
     this.applyCamera();
     const world = this.camera.toWorld(drag.screenX, drag.screenY);
     this.moveDraggedTo(world.x, world.y);
+    // The finger is still but its world position moves with the camera: keep the
+    // remote cursor attached to the piece it is carrying.
+    this.opts.onPointerMove?.(world.x, world.y);
   }
 
   private endDrag() {

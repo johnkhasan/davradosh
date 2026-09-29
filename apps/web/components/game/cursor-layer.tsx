@@ -45,16 +45,18 @@ export function CursorLayer({
       const dt = Math.min(100, now - last);
       last = now;
       const view = controller.puzzleView;
-      // Exponential smoothing: ~50 ms time constant, frame-rate independent.
-      const k = 1 - Math.exp(-dt / 50);
       for (const [playerId, node] of nodes.current) {
         const cursor = controller.cursors.get(playerId);
         if (!cursor || !view) {
           node.style.opacity = "0";
           continue;
         }
-        cursor.x += (cursor.targetX - cursor.x) * k;
-        cursor.y += (cursor.targetY - cursor.y) * k;
+        // Same buffered playback as remote drags, so a cursor stays glued to the piece it carries.
+        const pos = cursor.motion.sample(now);
+        if (pos) {
+          cursor.x = pos.x;
+          cursor.y = pos.y;
+        }
         const screen = view.camera.toScreen(cursor.x, cursor.y);
         node.style.transform = `translate3d(${screen.x}px, ${screen.y}px, 0)`;
         const level = voice ? voice.audioLevel(playerId) : 0;

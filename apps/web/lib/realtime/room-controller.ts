@@ -1,5 +1,6 @@
 import {
   CURSOR_SEND_INTERVAL_MS,
+  MotionBuffer,
   PuzzleState,
   type ClientToServerEvents,
   type JoinError,
@@ -53,11 +54,11 @@ export interface Reaction {
 
 export interface RemoteCursor {
   playerId: string;
-  /** Rendered position (interpolated towards the target). */
+  /** Last rendered position (written by the cursor layer every frame). */
   x: number;
   y: number;
-  targetX: number;
-  targetY: number;
+  /** Received positions, played back smoothly a little behind real time. */
+  motion: MotionBuffer;
   lastMoveAt: number;
 }
 
@@ -95,6 +96,7 @@ export class RoomController {
   private lastCursorSent = 0;
   private lastMoveSent = 0;
   private moveTimer: number | null = null;
+  private cursorTimer: number | null = null;
   /** Keeps our lock alive while a piece is held still (server expires locks after 10 s). */
   private holdTimer: number | null = null;
   private lastDrag: { groupId: number; x: number; y: number } | null = null;
@@ -243,6 +245,8 @@ export class RoomController {
     if (this.moveTimer) window.clearTimeout(this.moveTimer);
     this.stopHoldHeartbeat();
     if (this.viewportTimer) window.clearTimeout(this.viewportTimer);
+    if (this.cursorTimer) window.clearTimeout(this.cursorTimer);
+    this.cursorTimer = null;
     this.socket?.removeAllListeners();
     this.socket?.disconnect();
     this.socket = null;
@@ -617,24 +621,28 @@ export class RoomController {
     this.lastPointer = { x, y };
     // Viewers watch quietly (the server would drop their cursor anyway).
     if (this.myRole !== "player") return;
-    const now = performance.now();
-    if (now - this.lastCursorSent < CURSOR_SEND_INTERVAL_MS) return;
-    this.lastCursorSent = now;
-    this.socket?.emit("cursor:move", { x, y });
+    // Throttled with a trailing send, so the final position after a stop always goes out.
+    const send = () => {
+      this.cursorTimer = null;
+      this.lastCursorSent = performance.now();
+      if (this.lastPointer) this.socket?.emit("cursor:move", this.lastPointer);
+    };
+    const wait = CURSOR_SEND_INTERVAL_MS - (performance.now() - this.lastCursorSent);
+    if (wait <= 0) send();
+    else this.cursorTimer ??= window.setTimeout(send, wait);
   }
 
   // ---------------------------------------------------------------- remote events
 
   private onCursor(playerId: string, x: number, y: number) {
-    const cursor = this.cursors.get(playerId);
     const now = performance.now();
-    if (cursor) {
-      cursor.targetX = x;
-      cursor.targetY = y;
-      cursor.lastMoveAt = now;
-    } else {
-      this.cursors.set(playerId, { playerId, x, y, targetX: x, targetY: y, lastMoveAt: now });
+    let cursor = this.cursors.get(playerId);
+    if (!cursor) {
+      cursor = { playerId, x, y, motion: new MotionBuffer(), lastMoveAt: now };
+      this.cursors.set(playerId, cursor);
     }
+    cursor.motion.push(x, y, now, { x: cursor.x, y: cursor.y });
+    cursor.lastMoveAt = now;
   }
 
   private onGrabbed(groupId: number, playerId: string) {
@@ -656,8 +664,8 @@ export class RoomController {
 
   private onMoved(groupId: number, x: number, y: number) {
     if (!this.state!.setGroupPosition(groupId, x, y)) return false;
-    // Updates arrive ~25 times a second; a short tween turns them into smooth motion.
-    this.view?.syncGroup(groupId, { animate: true, duration: CURSOR_SEND_INTERVAL_MS * 2 });
+    // Updates arrive ~25 times a second and unevenly; the view buffers and interpolates them.
+    this.view?.moveRemote(groupId, x, y);
   }
 
   private onDropped(groupId: number, x: number, y: number, playerId: string) {
