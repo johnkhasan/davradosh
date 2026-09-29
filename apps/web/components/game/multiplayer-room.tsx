@@ -176,6 +176,7 @@ function RoomScreen({
   const resultOpen = Boolean(completed) && dismissedRound !== room?.startedAt;
   const viewing = Boolean(completed) && !resultOpen;
   const isViewer = players.find((p) => p.id === me)?.role === "viewer";
+  const isHost = players.find((p) => p.id === me)?.isHost ?? false;
   const seatedPlayers = players.filter((p) => p.role === "player");
   const viewerCount = players.length - seatedPlayers.length;
 
@@ -309,7 +310,8 @@ function RoomScreen({
               >
                 <Frame />
               </ToolButton>
-              {!isViewer && (
+              {/* Host only: it rearranges everyone's loose pieces. */}
+              {isHost && (
                 <ToolButton
                   label="Bo'laklarni tartiblash (hamma uchun)"
                   onClick={() => controller.arrange()}

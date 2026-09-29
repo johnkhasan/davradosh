@@ -396,8 +396,9 @@ export class Room {
     }
   }
 
+  /** Host only: it moves everyone's loose pieces, so one player must not undo others' sorting. */
   arrange(playerId: string) {
-    if (this.info.status === "COMPLETED" || !this.isPlaying(playerId)) return;
+    if (this.info.status === "COMPLETED" || !this.isHostPlayer(playerId)) return;
     const moved = this.puzzle.arrange({
       edgesFirst: true,
       seed: this.info.seed,

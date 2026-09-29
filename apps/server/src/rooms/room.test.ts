@@ -339,6 +339,25 @@ describe("Room viewers and host actions", () => {
     expect([roleOf(pid(3)), roleOf(pid(4))]).toEqual(["viewer", "player"]);
   });
 
+  it("only the host arranges, and pieces someone is holding stay with them", () => {
+    room.grab(pid(2), "s2", 3);
+    const before = { ...room.puzzle.getGroup(0)! };
+
+    room.arrange(pid(2));
+    expect(spy.events("groups:moved")).toHaveLength(0);
+    expect(room.puzzle.getGroup(0)).toMatchObject({ x: before.x, y: before.y });
+
+    room.arrange(hostId);
+    const [moved] = spy.events("groups:moved");
+    const ids = (moved!.args[0] as Array<{ id: number }>).map((m) => m.id);
+    expect(ids).toContain(0);
+    expect(ids).not.toContain(3);
+    // The held piece is still player 2's: nobody else can take it, and they can keep dragging.
+    expect(room.grab(hostId, "h", 3)).toEqual({ ok: false, heldBy: pid(2) });
+    room.move(pid(2), "s2", { groupId: 3, x: 7, y: 8 });
+    expect(room.puzzle.getGroup(3)).toMatchObject({ x: 7, y: 8 });
+  });
+
   it("the host restarts: pieces scrambled again, timer and stats reset", () => {
     room.grab(pid(2), "s2", 0);
     room.drop(pid(2), "s2", { groupId: 0, x: 0, y: 0 });

@@ -266,8 +266,9 @@ export class RoomController {
     this.view?.setEdgeFilter(tools.edgesOnly);
   }
 
+  /** Host only (the server enforces it too). */
   arrange() {
-    if (this.myRole !== "player") return;
+    if (!this.isHost) return;
     this.socket?.emit("puzzle:arrange");
   }
 
