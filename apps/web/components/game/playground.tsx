@@ -1,6 +1,11 @@
 "use client";
 
-import { gridForPieceCount, PIECE_COUNT_OPTIONS, randomSeed } from "@puzzle/shared";
+import {
+  gridForPieceCount,
+  PIECE_COUNT_OPTIONS,
+  randomSeed,
+  type PuzzleSnapshot,
+} from "@puzzle/shared";
 import {
   Eye,
   Frame,
@@ -14,8 +19,16 @@ import {
   VolumeX,
 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createDemoImage, loadImageFile, type PuzzleImage } from "@/lib/game/images";
+import {
+  clearPracticeSave,
+  decodeImage,
+  encodeImage,
+  loadPracticeSave,
+  snapshotFits,
+  writePracticeSave,
+} from "@/lib/game/practice-save";
 import { setSoundEnabled } from "@/lib/game/sounds";
 import { cn } from "@/lib/utils";
 import { PuzzleCanvas, type PuzzleCanvasHandle, type PuzzleProgress } from "./puzzle-canvas";
@@ -23,6 +36,7 @@ import {
   formatDuration,
   FullscreenButton,
   ProgressBar,
+  TABLES,
   tableClass,
   TablePicker,
   ToolButton,
@@ -34,13 +48,27 @@ export function Playground() {
   const fileRef = useRef<HTMLInputElement>(null);
   // Rendered client-only (see playground-loader), so browser APIs are safe in initializers.
   const [params] = useState(() => new URLSearchParams(window.location.search));
-  const [image, setImage] = useState<PuzzleImage>(() => createDemoImage());
-  const [pieces, setPieces] = useState<number>(() => Number(params.get("pieces")) || 48);
-  const [seed, setSeed] = useState(() => randomSeed());
+  // Progress from before a reload; ignored when the link asks for a different piece count.
+  const [saved] = useState(() => {
+    const save = loadPracticeSave();
+    const requested = Number(params.get("pieces"));
+    return save && (!requested || requested === save.pieces) ? save : null;
+  });
+  // An uploaded picture is decoded asynchronously (see below); the demo one is drawn right away.
+  const [image, setImage] = useState<PuzzleImage | null>(() =>
+    saved && saved.image !== "demo" ? null : createDemoImage(),
+  );
+  const [isDemo, setIsDemo] = useState(() => !saved || saved.image === "demo");
+  const [pieces, setPieces] = useState<number>(
+    () => saved?.pieces ?? (Number(params.get("pieces")) || 48),
+  );
+  const [seed, setSeed] = useState(() => saved?.seed ?? randomSeed());
   const [ghost, setGhost] = useState(false);
   const [edgesOnly, setEdgesOnly] = useState(false);
   const [sound, setSound] = useState(true);
-  const [table, setTable] = useState<Table>("felt");
+  const [table, setTable] = useState<Table>(() =>
+    saved && saved.table in TABLES ? (saved.table as Table) : "felt",
+  );
   const [progress, setProgress] = useState<PuzzleProgress>({
     connected: 0,
     total: 0,
@@ -48,7 +76,7 @@ export function Playground() {
   });
   const [fps, setFps] = useState<number | null>(null);
   const debug = params.has("debug");
-  const [startedAt, setStartedAt] = useState(() => Date.now());
+  const [startedAt, setStartedAt] = useState(() => Date.now() - (saved?.elapsedMs ?? 0));
   const [finishedIn, setFinishedIn] = useState<number | null>(null);
 
   useEffect(() => setSoundEnabled(sound), [sound]);
@@ -80,17 +108,79 @@ export function Playground() {
     };
   }, []);
 
-  const grid = gridForPieceCount(pieces, image.width / image.height);
+  const grid = gridForPieceCount(pieces, image ? image.width / image.height : 4 / 3);
+  const initialSnapshot =
+    saved && saved.seed === seed && snapshotFits(saved.snapshot, grid.cols * grid.rows)
+      ? saved.snapshot
+      : undefined;
+
+  // Last reported layout; PuzzleCanvas reports a fresh one whenever a new puzzle is built.
+  const latest = useRef({ snapshot: null as PuzzleSnapshot | null, finished: false });
 
   const restart = useCallback(() => {
+    latest.current.finished = false;
     setSeed(randomSeed());
     setStartedAt(Date.now());
     setFinishedIn(null);
   }, []);
 
+  // Writes everything needed to rebuild this exact puzzle after a reload.
+  const persistRef = useRef(() => {});
+  // Layout effect: it must be current before PuzzleCanvas reports its first layout (child effects run first).
+  useLayoutEffect(() => {
+    persistRef.current = () => {
+      const { snapshot, finished } = latest.current;
+      if (!snapshot || !image || finished) return;
+      writePracticeSave({
+        pieces,
+        seed,
+        table,
+        elapsedMs: Date.now() - startedAt,
+        image: isDemo
+          ? "demo"
+          : { src: encodeImage(image), width: image.width, height: image.height },
+        snapshot,
+      });
+    };
+  });
+  const persist = useCallback(() => persistRef.current(), []);
+
+  useEffect(() => persist(), [table, persist]);
+
+  // Keep the clock accurate when the tab is closed or reloaded between moves.
+  useEffect(() => {
+    const onHide = () => persist();
+    window.addEventListener("pagehide", onHide);
+    document.addEventListener("visibilitychange", onHide);
+    return () => {
+      window.removeEventListener("pagehide", onHide);
+      document.removeEventListener("visibilitychange", onHide);
+    };
+  }, [persist]);
+
+  useEffect(() => {
+    if (!saved || saved.image === "demo") return;
+    let cancelled = false;
+    decodeImage(saved.image)
+      .then((restored) => !cancelled && setImage(restored))
+      .catch(() => {
+        if (cancelled) return;
+        // The saved picture is unreadable: fall back to a fresh demo puzzle.
+        clearPracticeSave();
+        setImage(createDemoImage());
+        setIsDemo(true);
+        setSeed(randomSeed());
+        setStartedAt(Date.now());
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [saved]);
+
   const onFile = async (file: File | undefined) => {
     if (!file) return;
     setImage(await loadImageFile(file));
+    setIsDemo(false);
     restart();
   };
 
@@ -124,20 +214,31 @@ export function Playground() {
       </header>
 
       <div className={cn("relative flex-1", tableClass(table))}>
-        <PuzzleCanvas
-          ref={canvasRef}
-          key={`${seed}-${grid.cols}x${grid.rows}`}
-          image={image}
-          cols={grid.cols}
-          rows={grid.rows}
-          seed={seed}
-          ghost={ghost}
-          edgesOnly={edgesOnly}
-          onProgress={setProgress}
-          onComplete={() => setFinishedIn(Date.now() - startedAt)}
-          onFps={debug ? setFps : undefined}
-          className="absolute inset-0"
-        />
+        {image && (
+          <PuzzleCanvas
+            ref={canvasRef}
+            key={`${seed}-${grid.cols}x${grid.rows}`}
+            image={image}
+            cols={grid.cols}
+            rows={grid.rows}
+            seed={seed}
+            ghost={ghost}
+            edgesOnly={edgesOnly}
+            initialSnapshot={initialSnapshot}
+            onChange={(snapshot) => {
+              latest.current.snapshot = snapshot;
+              persist();
+            }}
+            onProgress={setProgress}
+            onComplete={() => {
+              latest.current.finished = true;
+              clearPracticeSave();
+              setFinishedIn(Date.now() - startedAt);
+            }}
+            onFps={debug ? setFps : undefined}
+            className="absolute inset-0"
+          />
+        )}
 
         <nav
           aria-label="Asboblar"

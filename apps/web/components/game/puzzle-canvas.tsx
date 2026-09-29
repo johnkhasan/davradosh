@@ -1,6 +1,6 @@
 "use client";
 
-import { PuzzleState, type PuzzleConfig } from "@puzzle/shared";
+import { PuzzleState, type PuzzleConfig, type PuzzleSnapshot } from "@puzzle/shared";
 import { useEffect, useImperativeHandle, useRef, type Ref } from "react";
 import type { PuzzleImage } from "@/lib/game/images";
 import type { PuzzleView } from "@/lib/game/puzzle-view";
@@ -25,6 +25,10 @@ interface PuzzleCanvasProps {
   seed: number;
   ghost: boolean;
   edgesOnly: boolean;
+  /** Saved piece layout to resume from (read once, when the puzzle is built). */
+  initialSnapshot?: PuzzleSnapshot;
+  /** Called with the new layout after every change that should survive a reload. */
+  onChange?: (snapshot: PuzzleSnapshot) => void;
   onProgress?: (progress: PuzzleProgress) => void;
   onComplete?: () => void;
   onFps?: (fps: number) => void;
@@ -44,6 +48,8 @@ export function PuzzleCanvas({
   seed,
   ghost,
   edgesOnly,
+  initialSnapshot,
+  onChange,
   onProgress,
   onComplete,
   onFps,
@@ -53,10 +59,12 @@ export function PuzzleCanvas({
   const hostRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<PuzzleView | null>(null);
   const stateRef = useRef<PuzzleState | null>(null);
-  const callbacks = useRef({ onProgress, onComplete, onFps });
+  const callbacks = useRef({ onProgress, onComplete, onFps, onChange });
+  // Read only when the puzzle is built; the parent remounts (via `key`) for a new puzzle.
+  const initial = useRef(initialSnapshot);
   const tools = useRef({ ghost, edgesOnly });
   useEffect(() => {
-    callbacks.current = { onProgress, onComplete, onFps };
+    callbacks.current = { onProgress, onComplete, onFps, onChange };
     tools.current = { ghost, edgesOnly };
   });
 
@@ -69,6 +77,7 @@ export function PuzzleCanvas({
       if (!state || !view) return;
       for (const id of state.arrange({ edgesFirst: true, seed }))
         view.syncGroup(id, { animate: true });
+      callbacks.current.onChange?.(state.snapshot());
     },
   }));
 
@@ -84,8 +93,11 @@ export function PuzzleCanvas({
       pieceWidth: image.width / cols,
       pieceHeight: image.height / rows,
     };
-    const state = PuzzleState.create(config, seed);
+    const state = initial.current
+      ? new PuzzleState(config, initial.current)
+      : PuzzleState.create(config, seed);
     stateRef.current = state;
+    callbacks.current.onChange?.(state.snapshot());
 
     const report = () => {
       const progress = {
@@ -115,9 +127,11 @@ export function PuzzleCanvas({
           const result = state.snap(groupId);
           if (!result) {
             sounds.drop();
+            callbacks.current.onChange?.(state.snapshot());
             return;
           }
           created.applySnap(result);
+          callbacks.current.onChange?.(state.snapshot());
           if (result.placed) sounds.place();
           else sounds.snap();
           haptic();
