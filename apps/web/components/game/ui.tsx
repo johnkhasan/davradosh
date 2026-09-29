@@ -50,7 +50,7 @@ export function ToolButton({
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        "group/tip relative flex size-10 items-center justify-center rounded-control text-foreground/80 transition-colors hover:bg-surface-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none [&_svg]:size-5",
+        "group/tip relative flex size-10 items-center pointer-coarse:size-11 justify-center rounded-control text-foreground/80 transition-colors hover:bg-surface-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none [&_svg]:size-5",
         active && "bg-primary-soft text-primary hover:bg-primary-soft hover:text-primary",
         className,
       )}

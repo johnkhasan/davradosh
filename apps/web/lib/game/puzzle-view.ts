@@ -15,6 +15,7 @@ import {
   renderShadowCanvas,
   SHADOW_SCALE,
 } from "./piece-textures";
+import { haptic } from "./sounds";
 
 export interface PuzzleViewOptions {
   host: HTMLElement;
@@ -55,19 +56,39 @@ interface GroupView {
 
 interface DragState {
   pointerId: number;
+  pointerType: string;
   groupId: number;
   offsetX: number;
   offsetY: number;
+  /** Where the drag started and where the pointer is now, in screen pixels. */
+  startX: number;
+  startY: number;
+  screenX: number;
+  screenY: number;
 }
 
 interface PanState {
   pointerId: number;
   lastX: number;
   lastY: number;
+  /** Set for a touch that may still turn out to be a tap (double-tap zoom). */
+  tap?: { x: number; y: number; at: number };
 }
 
 const TWEEN_MS = 140;
 const FLASH_MS = 320;
+
+/** Touch input: fingers are imprecise, so a touch this close to a piece (screen px) still grabs it. */
+const TOUCH_SLOP_PX = 24;
+/** A drag this close to the screen edge (px) pans the camera, up to EDGE_PAN_SPEED px/s. */
+const EDGE_PAN_PX = 56;
+const EDGE_PAN_SPEED = 900;
+/** Below this movement (px) a second finger cancels the grab instead of dropping the piece. */
+const PINCH_CANCEL_PX = 12;
+const TAP_MOVE_PX = 10;
+const TAP_MS = 250;
+const DOUBLE_TAP_MS = 320;
+const DOUBLE_TAP_PX = 40;
 
 /**
  * Renders a puzzle with PixiJS and turns pointer input into grab/drag/drop
@@ -92,6 +113,7 @@ export class PuzzleView {
   private drag: DragState | null = null;
   private pan: PanState | null = null;
   private pinch: { distance: number; midX: number; midY: number } | null = null;
+  private lastTap: { x: number; y: number; at: number } | null = null;
   private edgeFilter = false;
   private cameraTween: { from: CameraState; to: CameraState; t: number } | null = null;
   private spaceDown = false;
@@ -130,6 +152,10 @@ export class PuzzleView {
     const canvas = this.app.canvas;
     canvas.style.touchAction = "none";
     canvas.style.display = "block";
+    // No text selection or iOS long-press callout while holding a piece.
+    canvas.style.userSelect = "none";
+    canvas.style.setProperty("-webkit-user-select", "none");
+    canvas.style.setProperty("-webkit-touch-callout", "none");
     host.appendChild(canvas);
 
     this.app.stage.addChild(this.world);
@@ -456,6 +482,7 @@ export class PuzzleView {
 
   private tick = () => {
     const dt = this.app.ticker.deltaMS;
+    this.edgePan(dt);
     if (this.cameraTween) {
       const tween = this.cameraTween;
       tween.t = Math.min(1, tween.t + dt / 320);
@@ -531,6 +558,37 @@ export class PuzzleView {
     return null;
   }
 
+  /** Closest movable group within `radius` world units of a point (touch tolerance). */
+  private nearestGroup(worldX: number, worldY: number, radius: number): number | null {
+    const { state } = this.opts;
+    let best: number | null = null;
+    let bestDistance = radius;
+    const layer = this.looseLayer.children;
+    for (let i = layer.length - 1; i >= 0; i--) {
+      const container = layer[i]!;
+      const groupId = this.groupIdOf(container);
+      if (groupId === null) continue;
+      const group = state.getGroup(groupId);
+      if (!group || group.placed || container.alpha < 0.5) continue;
+      for (const pieceId of group.pieceIds) {
+        const piece = this.pieces[pieceId]!;
+        // Distance to the piece body (its sprite without the texture padding).
+        const left = container.x + piece.sprite.x + PIECE_PADDING;
+        const top = container.y + piece.sprite.y + PIECE_PADDING;
+        const right = container.x + piece.sprite.x + piece.sprite.width - PIECE_PADDING;
+        const bottom = container.y + piece.sprite.y + piece.sprite.height - PIECE_PADDING;
+        const dx = Math.max(left - worldX, 0, worldX - right);
+        const dy = Math.max(top - worldY, 0, worldY - bottom);
+        const distance = Math.hypot(dx, dy);
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          best = groupId;
+        }
+      }
+    }
+    return best;
+  }
+
   private groupIdOf(container: Container): number | null {
     return this.containerGroup.get(container) ?? null;
   }
@@ -585,33 +643,58 @@ export class PuzzleView {
       // Pointer already released (fast taps); dragging still works without capture.
     }
 
-    // Second finger: switch to pinch-zoom and drop whatever was being dragged.
+    // Second finger: switch to pinch-zoom. The first finger usually landed on a piece
+    // by accident, so a piece that has barely moved goes back instead of being dropped.
     if (this.pointers.size === 2) {
+      if (this.drag) {
+        const { startX, startY, screenX, screenY, groupId } = this.drag;
+        if (Math.hypot(screenX - startX, screenY - startY) < PINCH_CANCEL_PX) {
+          const group = this.opts.state.getGroup(groupId);
+          const view = this.groups.get(groupId);
+          if (group && view) view.container.position.set(group.x, group.y);
+        }
+      }
       this.endDrag();
       this.pan = null;
+      this.lastTap = null;
       this.pinch = this.pinchMetrics();
       return;
     }
     if (this.pointers.size > 2) return;
 
+    const touch = event.pointerType !== "mouse";
     const wantsPan = this.spaceDown || event.button === 1 || event.button === 2;
     const world = this.camera.toWorld(point.x, point.y);
-    const groupId = wantsPan ? null : this.hitTest(world.x, world.y);
+    const groupId = wantsPan
+      ? null
+      : (this.hitTest(world.x, world.y) ??
+        (touch ? this.nearestGroup(world.x, world.y, TOUCH_SLOP_PX / this.camera.zoom) : null));
 
     if (groupId !== null && (this.opts.onGrab?.(groupId) ?? true)) {
       const group = this.opts.state.getGroup(groupId)!;
       this.drag = {
         pointerId: event.pointerId,
+        pointerType: event.pointerType,
         groupId,
         offsetX: world.x - group.x,
         offsetY: world.y - group.y,
+        startX: point.x,
+        startY: point.y,
+        screenX: point.x,
+        screenY: point.y,
       };
       this.setLifted(groupId, true);
       this.app.canvas.style.cursor = "grabbing";
+      if (touch) haptic(8);
       return;
     }
 
-    this.pan = { pointerId: event.pointerId, lastX: point.x, lastY: point.y };
+    this.pan = {
+      pointerId: event.pointerId,
+      lastX: point.x,
+      lastY: point.y,
+      tap: touch ? { x: point.x, y: point.y, at: performance.now() } : undefined,
+    };
     this.app.canvas.style.cursor = "grabbing";
   };
 
@@ -632,18 +715,16 @@ export class PuzzleView {
     }
 
     if (this.drag && this.drag.pointerId === event.pointerId) {
-      const x = world.x - this.drag.offsetX;
-      const y = world.y - this.drag.offsetY;
-      const view = this.groups.get(this.drag.groupId);
-      if (view) {
-        view.tween = undefined;
-        view.container.position.set(x, y);
-      }
-      this.opts.onDrag?.(this.drag.groupId, x, y);
+      this.drag.screenX = point.x;
+      this.drag.screenY = point.y;
+      this.moveDraggedTo(world.x, world.y);
       return;
     }
 
     if (this.pan && this.pan.pointerId === event.pointerId) {
+      const tap = this.pan.tap;
+      if (tap && Math.hypot(point.x - tap.x, point.y - tap.y) > TAP_MOVE_PX)
+        this.pan.tap = undefined;
       this.userCamera();
       this.camera.pan(point.x - this.pan.lastX, point.y - this.pan.lastY);
       this.pan.lastX = point.x;
@@ -659,11 +740,84 @@ export class PuzzleView {
 
   private onPointerUp = (event: PointerEvent) => {
     if (!this.pointers.delete(event.pointerId)) return;
-    if (this.pointers.size < 2) this.pinch = null;
+    if (this.pinch && this.pointers.size < 2) {
+      this.pinch = null;
+      // Lifting one finger of a pinch keeps panning with the other.
+      const [remaining] = [...this.pointers.entries()];
+      if (remaining) {
+        const [pointerId, at] = remaining;
+        this.pan = { pointerId, lastX: at.x, lastY: at.y };
+      }
+      return;
+    }
     if (this.drag?.pointerId === event.pointerId) this.endDrag();
-    if (this.pan?.pointerId === event.pointerId) this.pan = null;
+    if (this.pan?.pointerId === event.pointerId) {
+      const tap = this.pan.tap;
+      this.pan = null;
+      if (tap && event.type === "pointerup" && performance.now() - tap.at < TAP_MS) this.onTap(tap);
+    }
     if (!this.drag && !this.pan) this.app.canvas.style.cursor = this.spaceDown ? "grab" : "";
   };
+
+  /** Double-tap on the table: zoom in there, or back out to everything when already close. */
+  private onTap(tap: { x: number; y: number; at: number }) {
+    const last = this.lastTap;
+    if (
+      !last ||
+      tap.at - last.at > DOUBLE_TAP_MS ||
+      Math.hypot(tap.x - last.x, tap.y - last.y) > DOUBLE_TAP_PX
+    ) {
+      this.lastTap = tap;
+      return;
+    }
+    this.lastTap = null;
+    const screen = { width: this.app.screen.width, height: this.app.screen.height };
+    const overview = new Camera();
+    overview.fit(this.contentBounds(), screen);
+    const target = new Camera();
+    if (this.camera.zoom > overview.zoom * 1.8) {
+      Object.assign(target, overview.state);
+    } else {
+      Object.assign(target, this.camera.state);
+      target.zoomAt(tap.x, tap.y, 2.5);
+    }
+    this.userCamera();
+    this.cameraTween = { from: this.camera.state, to: target.state, t: 0 };
+  }
+
+  private moveDraggedTo(worldX: number, worldY: number) {
+    if (!this.drag) return;
+    const x = worldX - this.drag.offsetX;
+    const y = worldY - this.drag.offsetY;
+    const view = this.groups.get(this.drag.groupId);
+    if (view) {
+      view.tween = undefined;
+      view.container.position.set(x, y);
+    }
+    this.opts.onDrag?.(this.drag.groupId, x, y);
+  }
+
+  /** Touch drags near the screen edge pan the camera, so pieces can travel on a small screen. */
+  private edgePan(dt: number) {
+    const drag = this.drag;
+    if (!drag || drag.pointerType === "mouse" || this.pinch) return;
+    const { width, height } = this.app.screen;
+    const push = (p: number, size: number) =>
+      p < EDGE_PAN_PX
+        ? 1 - p / EDGE_PAN_PX
+        : p > size - EDGE_PAN_PX
+          ? -(1 - (size - p) / EDGE_PAN_PX)
+          : 0;
+    const vx = push(drag.screenX, width);
+    const vy = push(drag.screenY, height);
+    if (vx === 0 && vy === 0) return;
+    const step = (EDGE_PAN_SPEED * Math.min(dt, 50)) / 1000;
+    this.userCamera();
+    this.camera.pan(vx * step, vy * step);
+    this.applyCamera();
+    const world = this.camera.toWorld(drag.screenX, drag.screenY);
+    this.moveDraggedTo(world.x, world.y);
+  }
 
   private endDrag() {
     if (!this.drag) return;
