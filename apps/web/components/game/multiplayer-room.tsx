@@ -21,7 +21,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { IdentityDialog } from "@/components/identity-dialog";
 import { PuzzleLoader } from "@/components/puzzle-loader";
-import { setSoundEnabled } from "@/lib/game/sounds";
+import { setSoundEnabled, sounds } from "@/lib/game/sounds";
 import { loadIdentity, type Identity } from "@/lib/identity";
 import { RoomController, type RoomError } from "@/lib/realtime/room-controller";
 import { VoiceController } from "@/lib/realtime/voice-controller";
@@ -495,6 +495,8 @@ function InviteButton() {
   const [copied, setCopied] = useState(false);
   const copy = async () => {
     const url = window.location.href;
+    // Played on the click itself, so it is heard before a share sheet opens.
+    sounds.invite();
     try {
       if (navigator.share && window.matchMedia("(pointer: coarse)").matches) {
         await navigator.share({ title: "Puzzle'ni birga yig'amiz!", url });

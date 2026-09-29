@@ -52,6 +52,16 @@ export const sounds = {
   place() {
     tone(880, 0.15, "triangle", 0.08, 1320);
   },
+  /** Invite link copied or shared: a short bright two-note chime. */
+  invite() {
+    tone(784, 0.09, "sine", 0.07);
+    setTimeout(() => tone(1175, 0.16, "sine", 0.07), 70);
+  },
+  /** Someone entered the room: a soft doorbell "ding-dong". */
+  join() {
+    tone(988, 0.22, "triangle", 0.07);
+    setTimeout(() => tone(740, 0.3, "triangle", 0.06), 160);
+  },
   complete() {
     [523, 659, 784, 1047].forEach((f, i) =>
       setTimeout(() => tone(f, 0.35, "triangle", 0.09), i * 110),

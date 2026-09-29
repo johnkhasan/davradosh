@@ -169,12 +169,18 @@ export class RoomController {
     });
 
     socket.on("player:joined", (player) => {
+      if (player.id !== this.snapshot.me) sounds.join();
       this.upsertPlayer(player);
       // Newcomers learn where we are looking right away (minimap / follow).
       this.sendViewport(true);
     });
     socket.on("player:updated", (player) => {
-      const before = this.playerById(player.id)?.role;
+      const previous = this.playerById(player.id);
+      // A disconnected player coming back counts as joining again.
+      if (player.id !== this.snapshot.me && previous && !previous.connected && player.connected) {
+        sounds.join();
+      }
+      const before = previous?.role;
       if (player.id === this.snapshot.me && before && before !== player.role) {
         if (player.role === "viewer") {
           const dragging = this.view?.draggingGroupId;
