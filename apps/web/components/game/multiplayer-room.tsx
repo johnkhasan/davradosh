@@ -4,13 +4,15 @@ import { MAX_PLAYERS_PER_ROOM, type PlayerDTO } from "@puzzle/shared";
 import {
   Check,
   Eye,
+  RotateCcw,
+  Trophy,
   X,
   Frame,
   LayoutGrid,
+  LocateFixed,
   Link2,
   Minus,
   Plus,
-  Scan,
   Volume2,
   VolumeX,
   WifiOff,
@@ -104,7 +106,8 @@ function RoomScreen({
   const [edgesOnly, setEdgesOnly] = useState(false);
   const [sound, setSound] = useState(true);
   const [table, setTable] = useState<Table>("felt");
-  const [showCompleted, setShowCompleted] = useState(true);
+  // The result card of a finished round can be closed to look at the picture.
+  const [dismissedRound, setDismissedRound] = useState<number | null>(null);
 
   useEffect(() => {
     // Deferred one tick so React Strict Mode's mount/unmount/mount in development
@@ -168,6 +171,9 @@ function RoomScreen({
   const { room, players, me, status, error, progress, completed, holding, notice, following } =
     snapshot;
   const followed = following ? players.find((p) => p.id === following) : undefined;
+  // A round is identified by its start time, so a restart shows the next result card again.
+  const resultOpen = Boolean(completed) && dismissedRound !== room?.startedAt;
+  const viewing = Boolean(completed) && !resultOpen;
   const isViewer = players.find((p) => p.id === me)?.role === "viewer";
   const seatedPlayers = players.filter((p) => p.role === "player");
   const viewerCount = players.length - seatedPlayers.length;
@@ -177,9 +183,10 @@ function RoomScreen({
   return (
     <div className="fixed inset-0 flex flex-col overflow-hidden bg-background">
       <header className="z-10 flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border bg-surface/90 px-3 py-2 backdrop-blur sm:px-4">
-        <Link href="/" className="font-display text-lg font-bold" aria-label="Bosh sahifa">
+        {/* Not a link: a stray click mid-game must not leave the room. */}
+        <span className="font-display text-lg font-bold select-none">
           🧩<span className="hidden sm:inline"> Puzzle</span>
-        </Link>
+        </span>
         {room && (
           <span className="hidden text-sm text-muted md:inline">
             {room.cols * room.rows} bo&apos;lak ·{" "}
@@ -221,7 +228,13 @@ function RoomScreen({
           voice={voice}
           voiceSnapshot={voiceSnapshot}
         />
-        <VideoBubbles voice={voice} snapshot={voiceSnapshot} players={players} me={me} />
+        <VideoBubbles
+          voice={voice}
+          snapshot={voiceSnapshot}
+          players={players}
+          me={me}
+          belowActions={viewing}
+        />
         <AudioStartBanner voice={voice} snapshot={voiceSnapshot} />
         <ReactionLayer controller={controller} players={players} />
         {isViewer && room && !followed && (
@@ -274,47 +287,50 @@ function RoomScreen({
           </div>
         )}
 
-        <nav
-          aria-label="Asboblar"
-          className="absolute bottom-3 left-3 z-10 flex flex-row gap-1 rounded-card border border-border bg-surface/95 p-1.5 shadow-soft-md backdrop-blur sm:top-1/2 sm:bottom-auto sm:-translate-y-1/2 sm:flex-col"
-        >
-          <ToolButton
-            label="Asl rasm (Tab ni bosib turing)"
-            active={ghost}
-            onClick={() => setGhost((v) => !v)}
+        {/* While admiring the finished picture only the view controls stay. */}
+        {!viewing && (
+          <nav
+            aria-label="Asboblar"
+            className="absolute bottom-3 left-3 z-10 flex flex-row gap-1 rounded-card border border-border bg-surface/95 p-1.5 shadow-soft-md backdrop-blur sm:top-1/2 sm:bottom-auto sm:-translate-y-1/2 sm:flex-col"
           >
-            <Eye />
-          </ToolButton>
-          <ToolButton
-            label="Faqat chekka bo'laklar"
-            active={edgesOnly}
-            onClick={() => setEdgesOnly((v) => !v)}
-          >
-            <Frame />
-          </ToolButton>
-          {!isViewer && (
             <ToolButton
-              label="Bo'laklarni tartiblash (hamma uchun)"
-              onClick={() => controller.arrange()}
+              label="Asl rasm (Tab ni bosib turing)"
+              active={ghost}
+              onClick={() => setGhost((v) => !v)}
             >
-              <LayoutGrid />
+              <Eye />
             </ToolButton>
-          )}
-          <ToolButton
-            label={sound ? "Ovozni o'chirish" : "Ovozni yoqish"}
-            onClick={() => setSound((v) => !v)}
-          >
-            {sound ? <Volume2 /> : <VolumeX />}
-          </ToolButton>
-          {/* Viewers listen only: LiveKit does not let them publish. */}
-          {!isViewer && (
-            <VoiceButtons
-              voice={voice}
-              snapshot={voiceSnapshot}
-              onOpenSettings={() => setVoiceSettings((v) => !v)}
-            />
-          )}
-        </nav>
+            <ToolButton
+              label="Faqat chekka bo'laklar"
+              active={edgesOnly}
+              onClick={() => setEdgesOnly((v) => !v)}
+            >
+              <Frame />
+            </ToolButton>
+            {!isViewer && (
+              <ToolButton
+                label="Bo'laklarni tartiblash (hamma uchun)"
+                onClick={() => controller.arrange()}
+              >
+                <LayoutGrid />
+              </ToolButton>
+            )}
+            <ToolButton
+              label={sound ? "Ovozni o'chirish" : "Ovozni yoqish"}
+              onClick={() => setSound((v) => !v)}
+            >
+              {sound ? <Volume2 /> : <VolumeX />}
+            </ToolButton>
+            {/* Viewers listen only: LiveKit does not let them publish. */}
+            {!isViewer && (
+              <VoiceButtons
+                voice={voice}
+                snapshot={voiceSnapshot}
+                onOpenSettings={() => setVoiceSettings((v) => !v)}
+              />
+            )}
+          </nav>
+        )}
 
         <div className="absolute right-3 bottom-3 flex items-center gap-1 rounded-card border border-border bg-surface/95 p-1.5 shadow-soft-md backdrop-blur">
           <TablePicker value={table} onChange={setTable} className="hidden sm:block" />
@@ -336,7 +352,7 @@ function RoomScreen({
             label="Hammasini ko'rsatish (F)"
             onClick={() => controller.puzzleView?.fitToContent()}
           >
-            <Scan />
+            <LocateFixed />
           </ToolButton>
           <FullscreenButton />
         </div>
@@ -346,7 +362,7 @@ function RoomScreen({
         </div>
 
         <div className="absolute bottom-3 left-3 hidden rounded-card border border-border bg-surface/80 p-1.5 shadow-soft-md backdrop-blur lg:block">
-          <Minimap controller={controller} players={players} me={me} />
+          {!viewing && <Minimap controller={controller} players={players} me={me} />}
         </div>
 
         {voiceSettings && voiceSnapshot.status !== "unavailable" && (
@@ -374,13 +390,41 @@ function RoomScreen({
 
         <Notice notice={notice} />
 
-        {completed && showCompleted && (
+        {viewing && (
+          <div className="absolute top-3 right-3 z-20 flex items-center gap-2 motion-safe:animate-[pop_160ms_ease-out]">
+            <button
+              type="button"
+              onClick={() => setDismissedRound(null)}
+              className="flex items-center gap-1.5 rounded-control border border-border bg-surface/95 px-3 py-2 text-sm font-medium shadow-soft-md backdrop-blur hover:bg-surface-muted"
+            >
+              <Trophy className="size-4" aria-hidden /> Natija
+            </button>
+            {controller.isHost ? (
+              <button
+                type="button"
+                onClick={() => void controller.restart()}
+                className="flex items-center gap-1.5 rounded-control bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-soft-md transition-transform hover:-translate-y-0.5"
+              >
+                <RotateCcw className="size-4" aria-hidden /> Yangi o&apos;yin
+              </button>
+            ) : (
+              <Link
+                href="/create"
+                className="flex items-center gap-1.5 rounded-control bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-soft-md transition-transform hover:-translate-y-0.5"
+              >
+                <RotateCcw className="size-4" aria-hidden /> Yangi o&apos;yin
+              </Link>
+            )}
+          </div>
+        )}
+
+        {completed && resultOpen && (
           <CompletedDialog
             durationMs={completed.durationMs}
             stats={completed.stats}
             players={players}
             pieces={progress.total}
-            onClose={() => setShowCompleted(false)}
+            onClose={() => setDismissedRound(room?.startedAt ?? null)}
             onRestart={controller.isHost ? () => void controller.restart() : undefined}
           />
         )}

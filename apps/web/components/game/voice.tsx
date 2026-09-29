@@ -84,11 +84,14 @@ export function VideoBubbles({
   snapshot,
   players,
   me,
+  belowActions = false,
 }: {
   voice: VoiceController;
   snapshot: VoiceSnapshot;
   players: PlayerDTO[];
   me: string;
+  /** Leave room for buttons in the top-right corner (finished-round view). */
+  belowActions?: boolean;
 }) {
   const [big, setBig] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(false);
@@ -98,7 +101,12 @@ export function VideoBubbles({
   if (shown.length === 0) return null;
 
   return (
-    <div className="absolute top-3 right-3 z-10 flex flex-col items-end gap-2 max-sm:top-2 max-sm:flex-row-reverse max-sm:items-start">
+    <div
+      className={cn(
+        "absolute right-3 z-10 flex flex-col items-end gap-2 max-sm:flex-row-reverse max-sm:items-start",
+        belowActions ? "top-16" : "top-3 max-sm:top-2",
+      )}
+    >
       <button
         type="button"
         onClick={() => setCollapsed((v) => !v)}

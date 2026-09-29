@@ -11,14 +11,14 @@ import {
   Frame,
   ImageUp,
   LayoutGrid,
+  LocateFixed,
   Minus,
   Plus,
-  Scan,
   RotateCcw,
+  Trophy,
   Volume2,
   VolumeX,
 } from "lucide-react";
-import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { PuzzleLoader } from "@/components/puzzle-loader";
 import { createDemoImage, loadImageFile, type PuzzleImage } from "@/lib/game/images";
@@ -79,6 +79,10 @@ export function Playground() {
   const debug = params.has("debug");
   const [startedAt, setStartedAt] = useState(() => Date.now() - (saved?.elapsedMs ?? 0));
   const [finishedIn, setFinishedIn] = useState<number | null>(null);
+  // After finishing, "Ko'rish" closes the result card to admire the picture.
+  const [resultOpen, setResultOpen] = useState(true);
+  const finished = finishedIn !== null;
+  const viewing = finished && !resultOpen;
 
   useEffect(() => setSoundEnabled(sound), [sound]);
 
@@ -123,6 +127,7 @@ export function Playground() {
     setSeed(randomSeed());
     setStartedAt(Date.now());
     setFinishedIn(null);
+    setResultOpen(true);
   }, []);
 
   // Writes everything needed to rebuild this exact puzzle after a reload.
@@ -188,9 +193,8 @@ export function Playground() {
   return (
     <div className="fixed inset-0 flex flex-col overflow-hidden bg-background">
       <header className="z-10 flex flex-wrap items-center gap-3 border-b border-border bg-surface/90 px-4 py-2.5 backdrop-blur">
-        <Link href="/" className="font-display text-lg font-bold">
-          🧩 Puzzle
-        </Link>
+        {/* Not a link: a stray click mid-game must not leave the puzzle. */}
+        <span className="font-display text-lg font-bold select-none">🧩 Puzzle</span>
         <span className="rounded-full bg-primary-soft px-2.5 py-0.5 text-xs font-medium text-primary">
           Mashq maydoni
         </span>
@@ -242,40 +246,43 @@ export function Playground() {
           />
         )}
 
-        <nav
-          aria-label="Asboblar"
-          className="absolute bottom-3 left-3 z-10 flex flex-row gap-1 rounded-card border border-border bg-surface/95 p-1.5 shadow-soft-md backdrop-blur sm:top-1/2 sm:bottom-auto sm:-translate-y-1/2 sm:flex-col"
-        >
-          <ToolButton
-            label="Asl rasm (Tab ni bosib turing)"
-            active={ghost}
-            onClick={() => setGhost((v) => !v)}
+        {/* While admiring the finished picture only the view controls stay. */}
+        {!viewing && (
+          <nav
+            aria-label="Asboblar"
+            className="absolute bottom-3 left-3 z-10 flex flex-row gap-1 rounded-card border border-border bg-surface/95 p-1.5 shadow-soft-md backdrop-blur sm:top-1/2 sm:bottom-auto sm:-translate-y-1/2 sm:flex-col"
           >
-            <Eye />
-          </ToolButton>
-          <ToolButton
-            label="Faqat chekka bo'laklar"
-            active={edgesOnly}
-            onClick={() => setEdgesOnly((v) => !v)}
-          >
-            <Frame />
-          </ToolButton>
-          <ToolButton label="Bo'laklarni tartiblash" onClick={() => canvasRef.current?.arrange()}>
-            <LayoutGrid />
-          </ToolButton>
-          <ToolButton label="Rasm yuklash" onClick={() => fileRef.current?.click()}>
-            <ImageUp />
-          </ToolButton>
-          <ToolButton label="Qaytadan boshlash" onClick={restart}>
-            <RotateCcw />
-          </ToolButton>
-          <ToolButton
-            label={sound ? "Ovozni o'chirish" : "Ovozni yoqish"}
-            onClick={() => setSound((v) => !v)}
-          >
-            {sound ? <Volume2 /> : <VolumeX />}
-          </ToolButton>
-        </nav>
+            <ToolButton
+              label="Asl rasm (Tab ni bosib turing)"
+              active={ghost}
+              onClick={() => setGhost((v) => !v)}
+            >
+              <Eye />
+            </ToolButton>
+            <ToolButton
+              label="Faqat chekka bo'laklar"
+              active={edgesOnly}
+              onClick={() => setEdgesOnly((v) => !v)}
+            >
+              <Frame />
+            </ToolButton>
+            <ToolButton label="Bo'laklarni tartiblash" onClick={() => canvasRef.current?.arrange()}>
+              <LayoutGrid />
+            </ToolButton>
+            <ToolButton label="Rasm yuklash" onClick={() => fileRef.current?.click()}>
+              <ImageUp />
+            </ToolButton>
+            <ToolButton label="Qaytadan boshlash" onClick={restart}>
+              <RotateCcw />
+            </ToolButton>
+            <ToolButton
+              label={sound ? "Ovozni o'chirish" : "Ovozni yoqish"}
+              onClick={() => setSound((v) => !v)}
+            >
+              {sound ? <Volume2 /> : <VolumeX />}
+            </ToolButton>
+          </nav>
+        )}
         <input
           ref={fileRef}
           type="file"
@@ -301,7 +308,7 @@ export function Playground() {
             <Plus />
           </ToolButton>
           <ToolButton label="Hammasini ko'rsatish (F)" onClick={() => canvasRef.current?.fit()}>
-            <Scan />
+            <LocateFixed />
           </ToolButton>
           <FullscreenButton />
         </div>
@@ -312,7 +319,26 @@ export function Playground() {
           </span>
         )}
 
-        {finishedIn !== null && (
+        {viewing && (
+          <div className="absolute top-3 right-3 z-10 flex items-center gap-2 motion-safe:animate-[pop_160ms_ease-out]">
+            <button
+              type="button"
+              onClick={() => setResultOpen(true)}
+              className="flex items-center gap-1.5 rounded-control border border-border bg-surface/95 px-3 py-2 text-sm font-medium shadow-soft-md backdrop-blur hover:bg-surface-muted"
+            >
+              <Trophy className="size-4" aria-hidden /> Natija
+            </button>
+            <button
+              type="button"
+              onClick={restart}
+              className="flex items-center gap-1.5 rounded-control bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-soft-md transition-transform hover:-translate-y-0.5"
+            >
+              <RotateCcw className="size-4" aria-hidden /> Yangi o&apos;yin
+            </button>
+          </div>
+        )}
+
+        {finished && resultOpen && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/30 p-4 backdrop-blur-[2px]">
             <div className="w-full max-w-sm rounded-card bg-surface p-6 text-center shadow-soft-lg">
               <div className="text-5xl" aria-hidden>
@@ -324,7 +350,7 @@ export function Playground() {
               </p>
               <div className="mt-5 flex gap-2">
                 <button
-                  onClick={() => setFinishedIn(null)}
+                  onClick={() => setResultOpen(false)}
                   className="flex-1 rounded-control border border-border px-4 py-2.5 font-medium"
                 >
                   Ko&apos;rish
