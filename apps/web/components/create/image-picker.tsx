@@ -1,8 +1,9 @@
 "use client";
 
-import { ImageUp, Loader2 } from "lucide-react";
+import { ImageUp } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useEffect, useRef, useState, type DragEvent } from "react";
+import { PuzzleMark } from "@/components/puzzle-loader";
 import { api, type GalleryItem } from "@/lib/api";
 import type { CropRect } from "@/lib/game/crop";
 import { loadImageFile } from "@/lib/game/images";
@@ -253,7 +254,7 @@ function Upload({
         )}
       >
         {busy ? (
-          <Loader2 className="size-10 animate-spin text-primary" aria-hidden />
+          <PuzzleMark className="size-10" />
         ) : (
           <ImageUp className="size-10 text-primary" aria-hidden />
         )}

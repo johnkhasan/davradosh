@@ -8,7 +8,6 @@ import {
   Frame,
   LayoutGrid,
   Link2,
-  Loader2,
   Minus,
   Plus,
   Scan,
@@ -19,6 +18,7 @@ import {
 import Link from "next/link";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { IdentityDialog } from "@/components/identity-dialog";
+import { PuzzleLoader } from "@/components/puzzle-loader";
 import { setSoundEnabled } from "@/lib/game/sounds";
 import { loadIdentity, type Identity } from "@/lib/identity";
 import { RoomController, type RoomError } from "@/lib/realtime/room-controller";
@@ -258,12 +258,10 @@ function RoomScreen({
         )}
 
         {(status === "connecting" || status === "loading") && (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="flex items-center gap-2 rounded-full bg-surface px-4 py-2 text-sm shadow-soft-md">
-              <Loader2 className="size-4 animate-spin" aria-hidden />
-              {status === "connecting" ? "Ulanmoqda…" : "Puzzle tayyorlanmoqda…"}
-            </div>
-          </div>
+          <PuzzleLoader
+            variant="overlay"
+            label={status === "connecting" ? "Ulanmoqda" : "Puzzle tayyorlanmoqda"}
+          />
         )}
 
         {status === "reconnecting" && (

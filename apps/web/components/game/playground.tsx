@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { PuzzleLoader } from "@/components/puzzle-loader";
 import { createDemoImage, loadImageFile, type PuzzleImage } from "@/lib/game/images";
 import {
   clearPracticeSave,
@@ -214,6 +215,7 @@ export function Playground() {
       </header>
 
       <div className={cn("relative flex-1", tableClass(table))}>
+        {!image && <PuzzleLoader variant="overlay" label="Puzzle tiklanmoqda" />}
         {image && (
           <PuzzleCanvas
             ref={canvasRef}
