@@ -1,3 +1,4 @@
+import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import rateLimit from "@fastify/rate-limit";
 import fastifyStatic from "@fastify/static";
@@ -48,6 +49,7 @@ export async function createGameServer({ env, repository, checkDb, fetch }: Game
   });
 
   const uploadDir = path.resolve(env.UPLOAD_DIR);
+  await mkdir(uploadDir, { recursive: true });
   const store = new ImageStore(uploadDir, env.PUBLIC_UPLOAD_URL.replace(/\/$/, ""));
   const gallery = new GalleryService({
     unsplashKey: env.UNSPLASH_ACCESS_KEY,

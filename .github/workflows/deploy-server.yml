@@ -1,0 +1,91 @@
+name: Deploy server
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/server/**"
+      - "packages/shared/**"
+      - "deploy/**"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/deploy-server.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-server
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/puzzle-server
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/server/Dockerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ github.sha }}
+            ${{ env.IMAGE }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    # Runs only once the VPS secrets exist (Settings → Secrets → Actions).
+    if: ${{ vars.DEPLOY_ENABLED == 'true' }}
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Copy compose files
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: "deploy/docker-compose.yml,deploy/Caddyfile,deploy/backup.sh"
+          target: /opt/puzzle
+          strip_components: 1
+
+      - name: Roll out
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          envs: IMAGE
+          script: |
+            set -e
+            cd /opt/puzzle
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+            PREVIOUS=$(docker compose images server --format json 2>/dev/null | grep -o '"Tag":"[^"]*"' | head -1 | cut -d'"' -f4 || true)
+            export SERVER_IMAGE="$IMAGE:${{ github.sha }}"
+            docker compose pull server
+            docker compose up -d --remove-orphans
+            for i in $(seq 1 30); do
+              if curl -fsS https://api.puzzle.javohir.ru/health >/dev/null; then echo "healthy"; exit 0; fi
+              sleep 2
+            done
+            echo "health check failed, rolling back to ${PREVIOUS:-latest}"
+            export SERVER_IMAGE="$IMAGE:${PREVIOUS:-latest}"
+            docker compose up -d server
+            exit 1

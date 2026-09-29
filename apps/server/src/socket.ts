@@ -1,5 +1,6 @@
 import type { Server as HttpServer } from "node:http";
 import { Server } from "socket.io";
+import { parseOrigins } from "./lib/origins";
 import type { GameServer } from "./rooms/socket-handlers";
 
 export function createSocketServer(
@@ -7,7 +8,7 @@ export function createSocketServer(
   opts: { corsOrigins: string[] },
 ): GameServer {
   return new Server(httpServer, {
-    cors: { origin: opts.corsOrigins, credentials: true },
+    cors: { origin: parseOrigins(opts.corsOrigins), credentials: true },
     // Keep connections alive through proxies and detect dead mobile clients quickly.
     pingInterval: 10_000,
     pingTimeout: 8_000,

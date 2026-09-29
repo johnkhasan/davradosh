@@ -27,6 +27,7 @@ export class RoomManager {
   private readonly opts: Required<RoomManagerOptions>;
   private sweepTimer: NodeJS.Timeout | null = null;
   private saveTimer: NodeJS.Timeout | null = null;
+  private cleanupTimer: NodeJS.Timeout | null = null;
 
   constructor(options: RoomManagerOptions) {
     this.opts = { saveIntervalMs: 10_000, idleUnloadMs: 10 * 60_000, ...options };
@@ -35,11 +36,24 @@ export class RoomManager {
   start() {
     this.sweepTimer = setInterval(() => this.sweep(), 1_000);
     this.saveTimer = setInterval(() => void this.saveDirty(), this.opts.saveIntervalMs);
+    this.cleanupTimer = setInterval(() => void this.deleteExpired(), 60 * 60_000);
+    void this.deleteExpired();
+  }
+
+  /** Rooms live for ROOM_TTL_MS (7 days). */
+  async deleteExpired() {
+    try {
+      const count = await this.opts.repository.deleteExpiredRooms(new Date());
+      if (count > 0) this.opts.logger.info({ count }, "expired rooms deleted");
+    } catch (error) {
+      this.opts.logger.error({ err: error }, "failed to delete expired rooms");
+    }
   }
 
   async stop() {
     if (this.sweepTimer) clearInterval(this.sweepTimer);
     if (this.saveTimer) clearInterval(this.saveTimer);
+    if (this.cleanupTimer) clearInterval(this.cleanupTimer);
     await this.saveDirty();
   }
 

@@ -6,7 +6,7 @@ har kimning kursori Figmadagidek ismi bilan ko'rinadi.
 - Frontend: https://puzzle.javohir.ru (Vercel)
 - Backend: https://api.puzzle.javohir.ru (VPS, Docker Compose)
 
-To'liq reja: [plan.md](./plan.md)
+To'liq reja: [plan.md](./plan.md) · Deploy: [deploy/README.md](./deploy/README.md)
 
 ## Tuzilma
 
@@ -25,6 +25,7 @@ pnpm install
 cp apps/server/.env.example apps/server/.env
 cp apps/web/.env.example apps/web/.env.local
 
+# PostgreSQL ixtiyoriy: DATABASE_URL bo'lmasa room'lar xotirada saqlanadi
 pnpm db:up                                   # lokal Postgres (docker)
 pnpm --filter @puzzle/server db:migrate      # migratsiyalar
 pnpm dev                                     # web :3000, server :4000
