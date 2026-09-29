@@ -1,4 +1,9 @@
-import { HOST_HANDOFF_MS, LOCK_TIMEOUT_MS, SEAT_RESERVATION_MS, type JoinPayload } from "@puzzle/shared";
+import {
+  HOST_HANDOFF_MS,
+  LOCK_TIMEOUT_MS,
+  SEAT_RESERVATION_MS,
+  type JoinPayload,
+} from "@puzzle/shared";
 import { beforeEach, describe, expect, it } from "vitest";
 import { publicPlayerId } from "../lib/ids";
 import { DEMO_IMAGE, type RoomRecord } from "./repository";
@@ -430,7 +435,9 @@ describe("Room host hand-off", () => {
   });
 
   it("prefers seated players over viewers and waits while nobody is connected", () => {
-    const viewerRoom = new Room(record({ maxPlayers: 2 }), spyEmitter().emitter, { now: () => now });
+    const viewerRoom = new Room(record({ maxPlayers: 2 }), spyEmitter().emitter, {
+      now: () => now,
+    });
     viewerRoom.join(host(), "h");
     now += 10;
     viewerRoom.join(player(2), "s2");
@@ -447,7 +454,9 @@ describe("Room host hand-off", () => {
   it("restores the current host after a reload", () => {
     room.transferHost(hostId, pid(2));
     const saved = room.persistable();
-    const reloaded = new Room(record({ hostPlayerId: saved.hostPlayerId }), spyEmitter().emitter, { now: () => now });
+    const reloaded = new Room(record({ hostPlayerId: saved.hostPlayerId }), spyEmitter().emitter, {
+      now: () => now,
+    });
     const joined = reloaded.join(player(2), "x");
     expect(joined.ok && joined.state.players[0]?.isHost).toBe(true);
   });

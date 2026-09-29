@@ -330,7 +330,8 @@ export class Room {
       .filter((p) => p.dto.connected && p.dto.id !== this.hostPlayerId)
       .sort(
         (a, b) =>
-          Number(b.dto.role === "player") - Number(a.dto.role === "player") || a.joinedAt - b.joinedAt,
+          Number(b.dto.role === "player") - Number(a.dto.role === "player") ||
+          a.joinedAt - b.joinedAt,
       );
     const successor = candidates[0];
     if (successor) this.setHost(successor.dto.id);
