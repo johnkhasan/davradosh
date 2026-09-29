@@ -1,4 +1,7 @@
+import { mkdtemp, readdir, rm } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
+import os from "node:os";
+import path from "node:path";
 import type {
   ClientToServerEvents,
   JoinAck,
@@ -6,6 +9,7 @@ import type {
   RoomStateDTO,
   ServerToClientEvents,
 } from "@puzzle/shared";
+import sharp from "sharp";
 import { io as connect, type Socket } from "socket.io-client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { MemoryRoomRepository } from "./rooms/memory-repository";
@@ -15,13 +19,45 @@ type Client = Socket<ServerToClientEvents, ClientToServerEvents>;
 
 let server: Awaited<ReturnType<typeof createGameServer>>;
 let url: string;
+let uploadDir: string;
 const clients: Client[] = [];
 
+const testJpeg = () =>
+  sharp({ create: { width: 900, height: 600, channels: 3, background: "#6c5ce7" } })
+    .jpeg()
+    .withMetadata({ exif: { IFD0: { Copyright: "secret-gps-owner" } } })
+    .toBuffer();
+
+/** Fake Picsum API so gallery tests run offline. */
+const fakeFetch: typeof fetch = async (input) => {
+  const href = String(input);
+  if (href.includes("/v2/list")) {
+    return Response.json([
+      { id: "10", author: "Test Author", width: 2500, height: 1667, url: "https://unsplash.com/x" },
+    ]);
+  }
+  if (href.endsWith("/info"))
+    return Response.json({ author: "Test Author", width: 2500, height: 1667 });
+  return new Response(new Uint8Array(await testJpeg()), {
+    headers: { "content-type": "image/jpeg" },
+  });
+};
+
 beforeAll(async () => {
+  uploadDir = await mkdtemp(path.join(os.tmpdir(), "puzzle-uploads-"));
   server = await createGameServer({
-    env: { NODE_ENV: "test", CORS_ORIGINS: ["http://localhost:3000"], MAX_PLAYERS_PER_ROOM: 5 },
+    env: {
+      NODE_ENV: "test",
+      CORS_ORIGINS: ["http://localhost:3000"],
+      MAX_PLAYERS_PER_ROOM: 5,
+      UPLOAD_DIR: uploadDir,
+      PUBLIC_UPLOAD_URL: "http://localhost/uploads",
+      UNSPLASH_ACCESS_KEY: undefined,
+      SERVE_UPLOADS: true,
+    },
     repository: new MemoryRoomRepository(),
     checkDb: async () => true,
+    fetch: fakeFetch,
   });
   await server.app.listen({ port: 0, host: "127.0.0.1" });
   url = `http://127.0.0.1:${(server.app.server.address() as AddressInfo).port}`;
@@ -30,6 +66,7 @@ beforeAll(async () => {
 afterAll(async () => {
   for (const client of clients) client.disconnect();
   await server.close();
+  await rm(uploadDir, { recursive: true, force: true });
 });
 
 async function createRoom(): Promise<string> {
@@ -133,5 +170,72 @@ describe("game server over Socket.IO", () => {
       avatar: "",
     } as never);
     expect(ack).toEqual({ ok: false, error: "invalid" });
+  });
+});
+
+describe("images", () => {
+  it("re-encodes uploads to WebP, strips metadata and serves them", async () => {
+    const form = new FormData();
+    form.append(
+      "file",
+      new Blob([new Uint8Array(await testJpeg())], { type: "image/jpeg" }),
+      "photo.jpg",
+    );
+    const res = await fetch(`${url}/api/uploads`, { method: "POST", body: form });
+    expect(res.status).toBe(201);
+    const image = (await res.json()) as {
+      id: string;
+      url: string;
+      width: number;
+      height: number;
+      source: string;
+    };
+    expect(image).toMatchObject({ width: 900, height: 600, source: "upload" });
+    expect(await readdir(uploadDir)).toEqual(
+      expect.arrayContaining([`${image.id}.webp`, `${image.id}_thumb.jpg`]),
+    );
+
+    const served = await fetch(`${url}/uploads/${image.id}.webp`);
+    expect(served.status).toBe(200);
+    expect(served.headers.get("access-control-allow-origin")).toBe("*");
+    const meta = await sharp(Buffer.from(await served.arrayBuffer())).metadata();
+    expect(meta.format).toBe("webp");
+    expect(meta.exif).toBeUndefined();
+
+    // A room can be created from the uploaded image.
+    const room = await fetch(`${url}/api/rooms`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ clientId: "host_client_1", imageId: image.id, pieces: 48 }),
+    });
+    expect(room.status).toBe(201);
+  });
+
+  it("rejects files that are not images", async () => {
+    const form = new FormData();
+    form.append("file", new Blob(["<?php echo 1; ?>"], { type: "image/png" }), "evil.png");
+    const res = await fetch(`${url}/api/uploads`, { method: "POST", body: form });
+    expect(res.status).toBe(415);
+  });
+
+  it("lists the gallery and imports a picture only once", async () => {
+    const list = await fetch(`${url}/api/gallery`);
+    const body = (await list.json()) as {
+      items: Array<{ provider: string; id: string }>;
+      categories: string[];
+    };
+    expect(body.categories).toEqual([]);
+    expect(body.items[0]).toMatchObject({ provider: "picsum", id: "10" });
+
+    const importOnce = () =>
+      fetch(`${url}/api/gallery/import`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ provider: "picsum", id: "10" }),
+      }).then((r) => r.json() as Promise<{ id: string; credit: string }>);
+    const first = await importOnce();
+    const second = await importOnce();
+    expect(first).toMatchObject({ id: "picsum-10", credit: "Test Author / Unsplash" });
+    expect(second.id).toBe(first.id);
   });
 });

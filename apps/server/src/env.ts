@@ -26,6 +26,11 @@ const EnvSchema = z.object({
   UPLOAD_DIR: z.string().default("./uploads"),
   PUBLIC_UPLOAD_URL: z.string().url().default("http://localhost:4000/uploads"),
   UNSPLASH_ACCESS_KEY: z.string().optional(),
+  /** Serve UPLOAD_DIR from the app (development). In production Caddy serves the files. */
+  SERVE_UPLOADS: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((value) => (value === undefined ? undefined : value === "true")),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

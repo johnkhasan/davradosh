@@ -84,6 +84,8 @@ export interface ImageDTO {
   /** "demo" images are generated client-side from `seed`; others load from `url`. */
   source: "demo" | "upload" | "unsplash";
   url: string;
+  /** Small preview (link previews, room lists). Empty for demo images. */
+  thumbUrl?: string;
   width: number;
   height: number;
   credit?: string | null;

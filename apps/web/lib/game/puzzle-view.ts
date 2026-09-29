@@ -519,7 +519,11 @@ export class PuzzleView {
   private onPointerDown = (event: PointerEvent) => {
     const point = this.localPoint(event);
     this.pointers.set(event.pointerId, point);
-    this.app.canvas.setPointerCapture(event.pointerId);
+    try {
+      this.app.canvas.setPointerCapture(event.pointerId);
+    } catch {
+      // Pointer already released (fast taps); dragging still works without capture.
+    }
 
     // Second finger: switch to pinch-zoom and drop whatever was being dragged.
     if (this.pointers.size === 2) {

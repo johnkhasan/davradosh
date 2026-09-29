@@ -1,6 +1,7 @@
 import type { ImageDTO } from "@puzzle/shared";
 import {
   DEMO_IMAGE,
+  type NewImage,
   type NewRoom,
   type RoomRecord,
   type RoomRepository,
@@ -14,6 +15,12 @@ export class MemoryRoomRepository implements RoomRepository {
 
   addImage(image: ImageDTO) {
     this.images.set(image.id, image);
+  }
+
+  async createImage(image: NewImage): Promise<ImageDTO> {
+    const dto: ImageDTO = { ...image, credit: image.credit ?? null };
+    this.images.set(dto.id, dto);
+    return dto;
   }
 
   async getImage(id: string) {

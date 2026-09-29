@@ -3,6 +3,7 @@ import type { Db } from "../db";
 import type { Prisma } from "../generated/prisma/client";
 import {
   DEMO_IMAGE,
+  type NewImage,
   type NewRoom,
   type RoomRecord,
   type RoomRepository,
@@ -13,6 +14,7 @@ type ImageRow = {
   id: string;
   source: string;
   url: string;
+  thumbUrl: string;
   width: number;
   height: number;
   credit: string | null;
@@ -23,6 +25,7 @@ function toImage(row: ImageRow): ImageDTO {
     id: row.id,
     source: row.source as ImageDTO["source"],
     url: row.url,
+    thumbUrl: row.thumbUrl,
     width: row.width,
     height: row.height,
     credit: row.credit,
@@ -31,6 +34,15 @@ function toImage(row: ImageRow): ImageDTO {
 
 export class PrismaRoomRepository implements RoomRepository {
   constructor(private readonly db: Db) {}
+
+  async createImage(image: NewImage) {
+    const row = await this.db.image.upsert({
+      where: { id: image.id },
+      create: { ...image, credit: image.credit ?? null },
+      update: {},
+    });
+    return toImage(row);
+  }
 
   async getImage(id: string) {
     const row = await this.db.image.findUnique({ where: { id } });

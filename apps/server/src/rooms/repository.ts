@@ -32,8 +32,14 @@ export interface RoomStateUpdate {
   completedAt: Date | null;
 }
 
+export type NewImage = Required<Pick<ImageDTO, "id" | "url" | "thumbUrl" | "width" | "height">> & {
+  source: "upload" | "unsplash";
+  credit?: string | null;
+};
+
 export interface RoomRepository {
   getImage(id: string): Promise<ImageDTO | null>;
+  createImage(image: NewImage): Promise<ImageDTO>;
   createRoom(room: NewRoom): Promise<RoomRecord>;
   loadRoom(id: string): Promise<RoomRecord | null>;
   saveRoomState(id: string, update: RoomStateUpdate): Promise<void>;
