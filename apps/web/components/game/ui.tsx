@@ -1,6 +1,7 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { Check, ChevronUp, Maximize, Minimize } from "lucide-react";
+import { type ReactNode, useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import { cn } from "@/lib/utils";
 
 export function ToolButton({
@@ -68,6 +69,163 @@ export type Table = keyof typeof TABLES;
 
 export function tableClass(table: Table) {
   return `table-${table}`;
+}
+
+/** Table background picker: opens upwards with a live swatch of each surface. */
+export function TablePicker({
+  value,
+  onChange,
+  className,
+}: {
+  value: Table;
+  onChange: (table: Table) => void;
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const listId = useId();
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointer = (e: PointerEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div ref={rootRef} className={cn("relative", className)}>
+      <button
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={listId}
+        aria-label={`Stol foni: ${TABLES[value]}`}
+        onClick={() => setOpen((v) => !v)}
+        className={cn(
+          "flex h-10 items-center gap-2 rounded-control pr-2 pl-1.5 text-sm font-medium text-foreground/80 transition-colors hover:bg-surface-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none",
+          open && "bg-surface-muted text-foreground",
+        )}
+      >
+        <span
+          aria-hidden
+          className={cn("size-7 rounded-lg ring-1 ring-black/10 ring-inset", tableClass(value))}
+        />
+        {TABLES[value]}
+        <ChevronUp
+          aria-hidden
+          className={cn("size-4 text-muted transition-transform", !open && "rotate-180")}
+        />
+      </button>
+
+      {open && (
+        <ul
+          id={listId}
+          role="listbox"
+          aria-label="Stol foni"
+          className="absolute right-0 bottom-full mb-3 w-52 origin-bottom-right animate-[pop_150ms_ease-out] rounded-card border border-border bg-surface p-1.5 shadow-soft-lg"
+        >
+          {(Object.entries(TABLES) as [Table, string][]).map(([key, label]) => {
+            const selected = key === value;
+            return (
+              <li key={key}>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={selected}
+                  onClick={() => {
+                    onChange(key);
+                    setOpen(false);
+                  }}
+                  className={cn(
+                    "flex w-full items-center gap-3 rounded-control px-2 py-1.5 text-left text-sm transition-colors hover:bg-surface-muted focus-visible:bg-surface-muted focus-visible:outline-none",
+                    selected && "font-semibold text-primary",
+                  )}
+                >
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "size-8 shrink-0 rounded-lg ring-1 ring-black/10 ring-inset",
+                      tableClass(key),
+                      selected && "ring-2 ring-primary",
+                    )}
+                  />
+                  <span className="flex-1">{label}</span>
+                  {selected && <Check aria-hidden className="size-4" />}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+type FullscreenDoc = Document & {
+  webkitFullscreenElement?: Element | null;
+  webkitExitFullscreen?: () => void;
+};
+type FullscreenEl = HTMLElement & { webkitRequestFullscreen?: () => void };
+
+function subscribeFullscreen(onChange: () => void) {
+  document.addEventListener("fullscreenchange", onChange);
+  document.addEventListener("webkitfullscreenchange", onChange);
+  return () => {
+    document.removeEventListener("fullscreenchange", onChange);
+    document.removeEventListener("webkitfullscreenchange", onChange);
+  };
+}
+
+const isFullscreen = () => {
+  const doc = document as FullscreenDoc;
+  return Boolean(doc.fullscreenElement ?? doc.webkitFullscreenElement);
+};
+
+/** Real browser fullscreen toggle; hidden where the API is missing (e.g. iPhone Safari). */
+export function FullscreenButton({ className }: { className?: string }) {
+  const active = useSyncExternalStore(subscribeFullscreen, isFullscreen, () => false);
+  const supported = useSyncExternalStore(
+    () => () => {},
+    () => {
+      const el = document.documentElement as FullscreenEl;
+      return Boolean(el.requestFullscreen ?? el.webkitRequestFullscreen);
+    },
+    () => false,
+  );
+  if (!supported) return null;
+
+  const toggle = () => {
+    const doc = document as FullscreenDoc;
+    const el = document.documentElement as FullscreenEl;
+    if (isFullscreen()) {
+      if (doc.exitFullscreen) void doc.exitFullscreen().catch(() => {});
+      else doc.webkitExitFullscreen?.();
+    } else if (el.requestFullscreen) {
+      void el.requestFullscreen().catch(() => {});
+    } else {
+      el.webkitRequestFullscreen?.();
+    }
+  };
+
+  return (
+    <ToolButton
+      label={active ? "To'liq ekrandan chiqish" : "To'liq ekran"}
+      active={active}
+      onClick={toggle}
+      className={className}
+    >
+      {active ? <Minimize /> : <Maximize />}
+    </ToolButton>
+  );
 }
 
 export function formatDuration(ms: number) {

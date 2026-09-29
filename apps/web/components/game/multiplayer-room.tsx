@@ -9,9 +9,9 @@ import {
   LayoutGrid,
   Link2,
   Loader2,
-  Maximize,
   Minus,
   Plus,
+  Scan,
   Volume2,
   VolumeX,
   WifiOff,
@@ -32,9 +32,10 @@ import { AudioStartBanner, VideoBubbles, VoiceButtons, VoiceSettings } from "./v
 import {
   Avatar,
   formatDuration,
+  FullscreenButton,
   ProgressBar,
-  TABLES,
   tableClass,
+  TablePicker,
   ToolButton,
   type Table,
 } from "./ui";
@@ -318,18 +319,7 @@ function RoomScreen({
         </nav>
 
         <div className="absolute right-3 bottom-3 flex items-center gap-1 rounded-card border border-border bg-surface/95 p-1.5 shadow-soft-md backdrop-blur">
-          <select
-            value={table}
-            onChange={(e) => setTable(e.target.value as Table)}
-            className="hidden rounded-control bg-transparent px-2 py-1 text-sm sm:block"
-            aria-label="Stol foni"
-          >
-            {Object.entries(TABLES).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
+          <TablePicker value={table} onChange={setTable} className="hidden sm:block" />
           <ToolButton
             label="Kichiklashtirish (−)"
             className="hidden sm:flex"
@@ -348,8 +338,9 @@ function RoomScreen({
             label="Hammasini ko'rsatish (F)"
             onClick={() => controller.puzzleView?.fitToContent()}
           >
-            <Maximize />
+            <Scan />
           </ToolButton>
+          <FullscreenButton />
         </div>
 
         <div className="absolute bottom-3 left-1/2 hidden -translate-x-1/2 sm:block">
