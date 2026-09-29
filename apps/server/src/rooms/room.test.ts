@@ -1,9 +1,4 @@
-import {
-  HOST_HANDOFF_MS,
-  LOCK_TIMEOUT_MS,
-  SEAT_RESERVATION_MS,
-  type JoinPayload,
-} from "@puzzle/shared";
+import { LOCK_TIMEOUT_MS, SEAT_RESERVATION_MS, type JoinPayload } from "@puzzle/shared";
 import { beforeEach, describe, expect, it } from "vitest";
 import { publicPlayerId } from "../lib/ids";
 import { DEMO_IMAGE, type RoomRecord } from "./repository";
@@ -421,35 +416,16 @@ describe("Room host hand-off", () => {
     expect(room.player(hostId)?.isHost).toBe(true);
   });
 
-  it("passes the host role to the longest-present player when the host stays away", () => {
+  it("keeps the host role while the host is away, even with others playing", () => {
     room.disconnect(hostId, "h");
-    now += HOST_HANDOFF_MS - 1;
+    now += 10 * 60_000;
     room.sweep();
     expect(room.player(pid(2))?.isHost).toBe(false);
-    now += 1;
-    room.sweep();
-    expect(room.player(pid(2))?.isHost).toBe(true);
     expect(room.player(pid(3))?.isHost).toBe(false);
-    // The former creator comes back as a normal player.
-    room.join(host(), "h3");
-    expect(room.player(hostId)?.isHost).toBe(false);
-  });
-
-  it("prefers seated players over viewers and waits while nobody is connected", () => {
-    const viewerRoom = new Room(record({ maxPlayers: 2 }), spyEmitter().emitter, {
-      now: () => now,
-    });
-    viewerRoom.join(host(), "h");
-    now += 10;
-    viewerRoom.join(player(2), "s2");
-    now += 10;
-    viewerRoom.join(player(3), "s3"); // viewer: room is full
-    viewerRoom.disconnect(pid(2), "s2");
-    viewerRoom.disconnect(hostId, "h");
-    now += HOST_HANDOFF_MS;
-    viewerRoom.sweep();
-    // Player 2 is seated but disconnected; the connected viewer takes over.
-    expect(viewerRoom.player(pid(3))?.isHost).toBe(true);
+    expect(room.restart(pid(2))).toEqual({ ok: false, error: "not_host" });
+    // The host comes back still in charge.
+    const back = room.join(host(), "h2");
+    expect(back.ok && back.state.players.find((p) => p.id === hostId)?.isHost).toBe(true);
   });
 
   it("restores the current host after a reload", () => {

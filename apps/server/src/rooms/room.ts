@@ -1,6 +1,5 @@
 import {
   CHAT_HISTORY_SIZE,
-  HOST_HANDOFF_MS,
   LOCK_TIMEOUT_MS,
   MAX_VIEWERS_PER_ROOM,
   PuzzleState,
@@ -72,10 +71,8 @@ export class Room {
   /** Recent chat, kept in memory only (a chat is about the current session). */
   private readonly chatLog: ChatMessageDTO[] = [];
   private chatSeq = 0;
-  /** Public id of the current host (starts as the creator, can move). */
+  /** Public id of the current host (starts as the creator; moves only when the host hands it over). */
   private hostPlayerId: string;
-  /** Since when the host has been away (null while connected). */
-  private hostAwaySince: number | null;
   private readonly now: () => number;
   /** Set whenever the puzzle changes; cleared by the manager after saving. */
   dirty = false;
@@ -116,8 +113,6 @@ export class Room {
     this.stats = record.stats ?? {};
     this.banned = new Set(record.banned);
     this.hostPlayerId = record.hostPlayerId ?? publicPlayerId(record.hostId);
-    // Nobody is connected when a room is (re)loaded, the host included.
-    this.hostAwaySince = this.now();
     this.lastActiveAt = this.now();
   }
 
@@ -175,7 +170,6 @@ export class Room {
         avatar: payload.avatar,
         connected: true,
       };
-      if (playerId === this.hostPlayerId) this.hostAwaySince = null;
       this.lastActiveAt = this.now();
       this.emit.others(socketId, "player:updated", existing.dto);
       return { ok: true, state: this.stateFor(playerId), replacedSocketId };
@@ -201,7 +195,6 @@ export class Room {
       },
     };
     this.players.set(playerId, player);
-    if (playerId === this.hostPlayerId) this.hostAwaySince = null;
     if (role === "player") this.stats[playerId] ??= { merges: 0 };
     this.lastActiveAt = this.now();
     this.emit.others(socketId, "player:joined", player.dto);
@@ -212,7 +205,6 @@ export class Room {
   disconnect(playerId: string, socketId: string) {
     const player = this.players.get(playerId);
     if (!player || player.socketId !== socketId) return;
-    if (playerId === this.hostPlayerId) this.hostAwaySince = this.now();
     if (player.dto.role === "viewer" && !player.dto.isHost) {
       this.players.delete(playerId);
       this.lastActiveAt = this.now();
@@ -325,22 +317,7 @@ export class Room {
       next.dto = { ...next.dto, isHost: true };
       this.emit.all("player:updated", next.dto);
     }
-    this.hostAwaySince = next?.dto.connected ? null : this.now();
     this.dirty = true;
-  }
-
-  /** The host has been away too long: the longest-present connected player (seated first) takes over. */
-  private handOffHostIfAway(now: number) {
-    if (this.hostAwaySince === null || now - this.hostAwaySince < HOST_HANDOFF_MS) return;
-    const candidates = [...this.players.values()]
-      .filter((p) => p.dto.connected && p.dto.id !== this.hostPlayerId)
-      .sort(
-        (a, b) =>
-          Number(b.dto.role === "player") - Number(a.dto.role === "player") ||
-          a.joinedAt - b.joinedAt,
-      );
-    const successor = candidates[0];
-    if (successor) this.setHost(successor.dto.id);
   }
 
   /** Scrambles the puzzle again (same picture and piece shapes), clears the timer and stats. */
@@ -505,7 +482,6 @@ export class Room {
         this.emit.all("piece:released", groupId);
       }
     }
-    this.handOffHostIfAway(now);
     for (const [playerId, player] of this.players) {
       if (
         !player.dto.connected &&
