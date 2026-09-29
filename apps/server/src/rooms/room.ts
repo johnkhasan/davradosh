@@ -15,6 +15,7 @@ import {
   type ServerToClientEvents,
   type ViewportPayload,
 } from "@puzzle/shared";
+import { publicPlayerId } from "../lib/ids";
 import type { RoomRecord, RoomStateUpdate } from "./repository";
 
 type EventName = keyof ServerToClientEvents;
@@ -120,21 +121,22 @@ export class Room {
   }
 
   join(payload: JoinPayload, socketId: string): JoinResult {
-    const existing = this.players.get(payload.clientId);
+    const playerId = publicPlayerId(payload.clientId);
+    const existing = this.players.get(playerId);
     if (existing) {
       const replacedSocketId = existing.dto.connected ? existing.socketId : null;
       existing.socketId = socketId;
       existing.disconnectedAt = null;
       existing.dto = {
         ...existing.dto,
-        name: this.uniqueName(payload.name, payload.clientId),
+        name: this.uniqueName(payload.name, playerId),
         color: payload.color,
         avatar: payload.avatar,
         connected: true,
       };
       this.lastActiveAt = this.now();
       this.emit.others(socketId, "player:updated", existing.dto);
-      return { ok: true, state: this.stateFor(payload.clientId), replacedSocketId };
+      return { ok: true, state: this.stateFor(playerId), replacedSocketId };
     }
 
     if (this.occupiedSeats >= this.info.maxPlayers) return { ok: false, error: "full" };
@@ -143,19 +145,19 @@ export class Room {
       socketId,
       disconnectedAt: null,
       dto: {
-        id: payload.clientId,
-        name: this.uniqueName(payload.name, payload.clientId),
+        id: playerId,
+        name: this.uniqueName(payload.name, playerId),
         color: payload.color,
         avatar: payload.avatar,
         connected: true,
         isHost: payload.clientId === this.hostId,
       },
     };
-    this.players.set(payload.clientId, player);
-    this.stats[payload.clientId] ??= { merges: 0 };
+    this.players.set(playerId, player);
+    this.stats[playerId] ??= { merges: 0 };
     this.lastActiveAt = this.now();
     this.emit.others(socketId, "player:joined", player.dto);
-    return { ok: true, state: this.stateFor(payload.clientId), replacedSocketId: null };
+    return { ok: true, state: this.stateFor(playerId), replacedSocketId: null };
   }
 
   /** Socket closed. The seat stays reserved for SEAT_RESERVATION_MS. */
@@ -174,10 +176,10 @@ export class Room {
     return this.players.get(playerId)?.socketId === socketId;
   }
 
-  private uniqueName(requested: string, clientId: string): string {
+  private uniqueName(requested: string, playerId: string): string {
     const taken = new Set(
       [...this.players.values()]
-        .filter((p) => p.dto.id !== clientId)
+        .filter((p) => p.dto.id !== playerId)
         .map((p) => p.dto.name.toLowerCase()),
     );
     if (!taken.has(requested.toLowerCase())) return requested;

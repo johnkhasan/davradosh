@@ -96,10 +96,10 @@ export function registerSocketHandlers(
         old?.disconnect(true);
       }
       socket.data.roomId = data.roomId;
-      socket.data.playerId = data.clientId;
+      socket.data.playerId = result.state.you;
       await socket.join(roomChannel(data.roomId));
       ack({ ok: true, state: result.state });
-      logger.info({ roomId: data.roomId, playerId: data.clientId }, "player joined");
+      logger.info({ roomId: data.roomId, playerId: result.state.you }, "player joined");
     });
 
     socket.on("room:sync", async (ack) => {

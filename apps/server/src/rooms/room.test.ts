@@ -1,5 +1,6 @@
 import { LOCK_TIMEOUT_MS, SEAT_RESERVATION_MS, type JoinPayload } from "@puzzle/shared";
 import { beforeEach, describe, expect, it } from "vitest";
+import { publicPlayerId } from "../lib/ids";
 import { DEMO_IMAGE, type RoomRecord } from "./repository";
 import { Room, type RoomEmitter } from "./room";
 
@@ -48,6 +49,8 @@ function record(overrides: Partial<RoomRecord> = {}): RoomRecord {
   };
 }
 
+const pid = (n: number) => publicPlayerId(`client_${n}_xxxx`);
+
 const player = (n: number, name = `Player ${n}`): JoinPayload => ({
   roomId: "room1234",
   clientId: `client_${n}_xxxx`,
@@ -75,7 +78,7 @@ describe("Room", () => {
 
     it("keeps a disconnected player's seat reserved, then frees it", () => {
       for (let n = 1; n <= 5; n++) room.join(player(n), `s${n}`);
-      room.disconnect(player(1).clientId, "s1");
+      room.disconnect(pid(1), "s1");
       expect(room.join(player(6), "s6").ok).toBe(false);
 
       now += SEAT_RESERVATION_MS;
@@ -86,10 +89,10 @@ describe("Room", () => {
 
     it("lets a player reconnect into their reserved seat", () => {
       for (let n = 1; n <= 5; n++) room.join(player(n), `s${n}`);
-      room.disconnect(player(3).clientId, "s3");
+      room.disconnect(pid(3), "s3");
       const again = room.join(player(3), "s3b");
       expect(again.ok).toBe(true);
-      expect(room.isCurrentSocket(player(3).clientId, "s3b")).toBe(true);
+      expect(room.isCurrentSocket(pid(3), "s3b")).toBe(true);
     });
 
     it("reports the old socket when the same player opens a second tab", () => {
@@ -110,7 +113,7 @@ describe("Room", () => {
     it("ignores a disconnect from a socket that was already replaced", () => {
       room.join(player(1), "tab1");
       room.join(player(1), "tab2");
-      room.disconnect(player(1).clientId, "tab1");
+      room.disconnect(pid(1), "tab1");
       expect(room.connectedCount).toBe(1);
     });
   });
@@ -122,43 +125,43 @@ describe("Room", () => {
     });
 
     it("gives a group to one player at a time", () => {
-      expect(room.grab(player(1).clientId, "s1", 0)).toEqual({ ok: true });
-      expect(room.grab(player(2).clientId, "s2", 0)).toEqual({
+      expect(room.grab(pid(1), "s1", 0)).toEqual({ ok: true });
+      expect(room.grab(pid(2), "s2", 0)).toEqual({
         ok: false,
-        heldBy: player(1).clientId,
+        heldBy: pid(1),
       });
       expect(spy.events("piece:grabbed")).toHaveLength(1);
     });
 
     it("expires locks after LOCK_TIMEOUT_MS without moves", () => {
-      room.grab(player(1).clientId, "s1", 0);
+      room.grab(pid(1), "s1", 0);
       now += LOCK_TIMEOUT_MS - 1;
-      room.move(player(1).clientId, "s1", { groupId: 0, x: 1, y: 1 });
+      room.move(pid(1), "s1", { groupId: 0, x: 1, y: 1 });
       now += LOCK_TIMEOUT_MS - 1;
       room.sweep();
       expect(spy.events("piece:released")).toHaveLength(0);
       now += 1;
       room.sweep();
       expect(spy.events("piece:released")).toHaveLength(1);
-      expect(room.grab(player(2).clientId, "s2", 0).ok).toBe(true);
+      expect(room.grab(pid(2), "s2", 0).ok).toBe(true);
     });
 
     it("releases locks when the holder disconnects", () => {
-      room.grab(player(1).clientId, "s1", 0);
-      room.disconnect(player(1).clientId, "s1");
-      expect(room.grab(player(2).clientId, "s2", 0).ok).toBe(true);
+      room.grab(pid(1), "s1", 0);
+      room.disconnect(pid(1), "s1");
+      expect(room.grab(pid(2), "s2", 0).ok).toBe(true);
     });
 
     it("ignores moves from players who do not hold the lock", () => {
-      room.grab(player(1).clientId, "s1", 0);
-      room.move(player(2).clientId, "s2", { groupId: 0, x: 1, y: 1 });
+      room.grab(pid(1), "s1", 0);
+      room.move(pid(2), "s2", { groupId: 0, x: 1, y: 1 });
       expect(room.puzzle.getGroup(0)!.x).toBe(5000);
     });
 
     it("refuses placed groups", () => {
-      room.grab(player(1).clientId, "s1", 0);
-      room.drop(player(1).clientId, "s1", { groupId: 0, x: 2, y: 2 });
-      expect(room.grab(player(2).clientId, "s2", 0).ok).toBe(false);
+      room.grab(pid(1), "s1", 0);
+      room.drop(pid(1), "s1", { groupId: 0, x: 2, y: 2 });
+      expect(room.grab(pid(2), "s2", 0).ok).toBe(false);
     });
   });
 
@@ -169,42 +172,42 @@ describe("Room", () => {
     });
 
     it("broadcasts a plain drop when nothing snaps", () => {
-      room.grab(player(1).clientId, "s1", 0);
-      room.drop(player(1).clientId, "s1", { groupId: 0, x: 100, y: 100 });
+      room.grab(pid(1), "s1", 0);
+      room.drop(pid(1), "s1", { groupId: 0, x: 100, y: 100 });
       expect(spy.events("piece:dropped")[0]).toMatchObject({
         to: "all",
-        args: [0, 100, 100, player(1).clientId],
+        args: [0, 100, 100, pid(1)],
       });
     });
 
     it("snaps, counts merges per player and never merges into a group held by someone else", () => {
       // Piece 1 is aligned with piece 0 but player 2 is holding piece 0.
-      room.grab(player(2).clientId, "s2", 0);
-      room.grab(player(1).clientId, "s1", 1);
-      room.drop(player(1).clientId, "s1", { groupId: 1, x: 5000, y: 5000 });
+      room.grab(pid(2), "s2", 0);
+      room.grab(pid(1), "s1", 1);
+      room.drop(pid(1), "s1", { groupId: 1, x: 5000, y: 5000 });
       expect(spy.events("piece:snapped")).toHaveLength(0);
 
       // Once released, the same drop merges.
-      room.drop(player(2).clientId, "s2", { groupId: 0, x: 5000, y: 5000 });
+      room.drop(pid(2), "s2", { groupId: 0, x: 5000, y: 5000 });
       const snap = spy.events("piece:snapped")[0]!;
-      expect(snap.args[0]).toMatchObject({ absorbed: [0], playerId: player(2).clientId });
-      expect(room.stateFor(player(2).clientId).stats[player(2).clientId]).toEqual({ merges: 1 });
+      expect(snap.args[0]).toMatchObject({ absorbed: [0], playerId: pid(2) });
+      expect(room.stateFor(pid(2)).stats[pid(2)]).toEqual({ merges: 1 });
     });
 
     it("corrects only the sender on a stale drop", () => {
-      room.drop(player(1).clientId, "s1", { groupId: 3, x: 1, y: 1 });
+      room.drop(pid(1), "s1", { groupId: 3, x: 1, y: 1 });
       expect(spy.events("piece:dropped")[0]).toMatchObject({
         to: "one",
         socket: "s1",
-        args: [3, 8000, 5000, player(1).clientId],
+        args: [3, 8000, 5000, pid(1)],
       });
     });
 
     it("announces completion once", () => {
       for (let id = 0; id < 12; id++) {
         const groupId = room.puzzle.groupOfPiece(id)!.id;
-        room.grab(player(1).clientId, "s1", groupId);
-        room.drop(player(1).clientId, "s1", { groupId, x: 0, y: 0 });
+        room.grab(pid(1), "s1", groupId);
+        room.drop(pid(1), "s1", { groupId, x: 0, y: 0 });
       }
       expect(room.info.status).toBe("COMPLETED");
       expect(spy.events("puzzle:completed")).toHaveLength(1);
@@ -214,8 +217,8 @@ describe("Room", () => {
 
   it("restores a saved state", () => {
     room.join(player(1), "s1");
-    room.grab(player(1).clientId, "s1", 0);
-    room.drop(player(1).clientId, "s1", { groupId: 0, x: 3, y: 3 });
+    room.grab(pid(1), "s1", 0);
+    room.drop(pid(1), "s1", { groupId: 0, x: 3, y: 3 });
     const saved = room.persistable();
     const restored = new Room(
       record({ state: saved.state, stats: saved.stats }),
@@ -230,13 +233,26 @@ describe("Room relays", () => {
     const spy = spyEmitter();
     const room = new Room(record(), spy.emitter);
     room.join(player(1), "s1");
-    room.reaction(player(1).clientId, "s1", { emoji: "🎉", x: 10, y: 20 });
-    room.viewport(player(1).clientId, "s1", { x: 0, y: 0, width: 800, height: 600 });
+    room.reaction(pid(1), "s1", { emoji: "🎉", x: 10, y: 20 });
+    room.viewport(pid(1), "s1", { x: 0, y: 0, width: 800, height: 600 });
     expect(spy.events("reaction")[0]).toMatchObject({
       to: "others",
       socket: "s1",
-      args: [player(1).clientId, "🎉", 10, 20],
+      args: [pid(1), "🎉", 10, 20],
     });
     expect(spy.events("viewport")[0]).toMatchObject({ to: "others", socket: "s1" });
+  });
+});
+
+describe("Room privacy", () => {
+  it("never exposes private client ids to other players", () => {
+    const spy = spyEmitter();
+    const room = new Room(record(), spy.emitter);
+    const first = room.join(player(1), "s1");
+    room.join(player(2), "s2");
+    const serialized = JSON.stringify([first, spy.sent, room.stateFor(pid(2))]);
+    expect(serialized).not.toContain(player(1).clientId);
+    expect(serialized).not.toContain(player(2).clientId);
+    expect(first.ok && first.state.you).toBe(pid(1));
   });
 });

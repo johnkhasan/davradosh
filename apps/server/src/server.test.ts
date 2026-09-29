@@ -12,6 +12,7 @@ import type {
 import sharp from "sharp";
 import { io as connect, type Socket } from "socket.io-client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { publicPlayerId } from "./lib/ids";
 import { MemoryRoomRepository } from "./rooms/memory-repository";
 import { createGameServer } from "./server";
 
@@ -135,12 +136,12 @@ describe("game server over Socket.IO", () => {
     // Cursor from A reaches B.
     const cursor = next(b.client, "cursor");
     a.client.emit("cursor:move", { x: 10, y: 20 });
-    expect(await cursor).toEqual(["client_1_abcdef", 10, 20]);
+    expect(await cursor).toEqual([publicPlayerId("client_1_abcdef"), 10, 20]);
 
     // A grabs group 1, B cannot.
     const grabbed = next(b.client, "piece:grabbed");
     expect(await a.client.emitWithAck("piece:grab", { groupId: 1 })).toEqual({ ok: true });
-    expect(await grabbed).toEqual([1, "client_1_abcdef"]);
+    expect(await grabbed).toEqual([1, publicPlayerId("client_1_abcdef")]);
     expect(await b.client.emitWithAck("piece:grab", { groupId: 1 })).toMatchObject({ ok: false });
 
     // A drops piece 1 exactly next to piece 0 → both clients receive the snap.
@@ -151,7 +152,11 @@ describe("game server over Socket.IO", () => {
     const [resultA] = await snapA;
     const [resultB] = (await snapB) as [RemoteSnap];
     expect(resultA).toEqual(resultB);
-    expect(resultB).toMatchObject({ groupId: 0, absorbed: [1], playerId: "client_1_abcdef" });
+    expect(resultB).toMatchObject({
+      groupId: 0,
+      absorbed: [1],
+      playerId: publicPlayerId("client_1_abcdef"),
+    });
 
     // Fill the room to 5 and check the 6th is refused.
     for (let n = 3; n <= 5; n++) expect((await join(roomId, n)).ack.ok).toBe(true);
