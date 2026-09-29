@@ -183,6 +183,12 @@ export class RoomController {
         if (player.connected) sounds.join();
         else sounds.leave();
       }
+      // Host changes (handed over, or taken over after the host stayed away).
+      if (previous && !previous.isHost && player.isHost) {
+        this.notify(
+          player.id === this.snapshot.me ? "👑 Endi siz hostsiz" : `👑 ${player.name} endi host`,
+        );
+      }
       const before = previous?.role;
       if (player.id === this.snapshot.me && before && before !== player.role) {
         if (player.role === "viewer") {
@@ -343,6 +349,14 @@ export class RoomController {
 
   restart() {
     return this.action(() => this.socket?.emitWithAck("host:restart"), "Qaytadan boshlab bo'lmadi");
+  }
+
+  /** Host only: hand the host role to another connected player. */
+  transferHost(playerId: string) {
+    return this.action(
+      () => this.socket?.emitWithAck("host:transfer", { playerId }),
+      "Hostlikni berib bo'lmadi",
+    );
   }
 
   /** Sends a floating emoji from our cursor (or the middle of our view). */

@@ -94,6 +94,7 @@ export class PrismaRoomRepository implements RoomRepository {
         startedAt: update.startedAt,
         completedAt: update.completedAt,
         banned: update.banned,
+        hostPlayerId: update.hostPlayerId,
       },
     });
   }
@@ -120,6 +121,7 @@ export class PrismaRoomRepository implements RoomRepository {
     completedAt: Date | null;
     expiresAt: Date;
     banned: string[];
+    hostPlayerId: string | null;
   }): RoomRecord {
     return {
       ...row,

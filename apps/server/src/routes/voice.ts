@@ -43,7 +43,7 @@ export async function voiceRoutes(
       if (!opts.voice) return reply.code(503).send({ error: "voice_disabled" });
       const ctx = await resolve(request.params, request.body);
       if (!ctx.ok) return reply.code(ctx.status).send({ error: "forbidden" });
-      if (ctx.clientId !== ctx.room.hostId) return reply.code(403).send({ error: "not_host" });
+      if (!ctx.player.isHost) return reply.code(403).send({ error: "not_host" });
       return { muted: await opts.voice.muteAll(ctx.room.id, ctx.player.id) };
     },
   );

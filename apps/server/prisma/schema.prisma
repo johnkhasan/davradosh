@@ -14,29 +14,31 @@ enum RoomStatus {
 
 model Room {
   /// nanoid(8), used in the share link: /room/{id}
-  id          String     @id
+  id           String     @id
   /// clientId of the player who created the room
-  hostId      String
-  imageId     String
-  image       Image      @relation(fields: [imageId], references: [id])
-  cols        Int
-  rows        Int
-  seed        Int
-  rotation    Boolean    @default(false)
+  hostId       String
+  /// Public id of the current host when it moved away from the creator
+  hostPlayerId String?
+  imageId      String
+  image        Image      @relation(fields: [imageId], references: [id])
+  cols         Int
+  rows         Int
+  seed         Int
+  rotation     Boolean    @default(false)
   /// 2..5, capped by MAX_PLAYERS_PER_ROOM on the server
-  maxPlayers  Int        @default(5)
-  status      RoomStatus @default(PLAYING)
+  maxPlayers   Int        @default(5)
+  status       RoomStatus @default(PLAYING)
   /// Snapshot of pieces and groups, written periodically by the game server
-  state       Json?
+  state        Json?
   /// Per-player stats: merges made, pieces placed
-  stats       Json?
-  createdAt   DateTime   @default(now())
+  stats        Json?
+  createdAt    DateTime   @default(now())
   /// Start of the current round (the host can restart the puzzle)
-  startedAt   DateTime   @default(now())
-  completedAt DateTime?
+  startedAt    DateTime   @default(now())
+  completedAt  DateTime?
   /// Public player ids the host kicked with a ban
-  banned      String[]   @default([])
-  expiresAt   DateTime
+  banned       String[]   @default([])
+  expiresAt    DateTime
 
   @@index([expiresAt])
 }

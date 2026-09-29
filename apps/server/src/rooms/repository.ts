@@ -3,6 +3,8 @@ import type { ImageDTO, PlayerStatsDTO, PuzzleSnapshot } from "@puzzle/shared";
 export interface RoomRecord {
   id: string;
   hostId: string;
+  /** Public id of the current host, when it is no longer the creator. */
+  hostPlayerId: string | null;
   image: ImageDTO;
   cols: number;
   rows: number;
@@ -22,7 +24,15 @@ export interface RoomRecord {
 
 export type NewRoom = Omit<
   RoomRecord,
-  "image" | "state" | "stats" | "status" | "createdAt" | "startedAt" | "completedAt" | "banned"
+  | "image"
+  | "state"
+  | "stats"
+  | "status"
+  | "createdAt"
+  | "startedAt"
+  | "completedAt"
+  | "banned"
+  | "hostPlayerId"
 > & {
   imageId: string;
   state: PuzzleSnapshot;
@@ -35,6 +45,7 @@ export interface RoomStateUpdate {
   startedAt: Date;
   completedAt: Date | null;
   banned: string[];
+  hostPlayerId: string | null;
 }
 
 export type NewImage = Required<Pick<ImageDTO, "id" | "url" | "thumbUrl" | "width" | "height">> & {

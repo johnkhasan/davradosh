@@ -102,6 +102,7 @@ export const KickPayloadSchema = z.object({
   playerId: z.string().min(1).max(64),
   ban: z.boolean().default(false),
 });
+export const TransferHostPayloadSchema = z.object({ playerId: z.string().min(1).max(64) });
 export const SetRolePayloadSchema = z.object({
   playerId: z.string().min(1).max(64),
   role: PlayerRoleSchema,
@@ -218,4 +219,9 @@ export interface ClientToServerEvents {
     ack: (result: ActionAck) => void,
   ) => void;
   "host:restart": (ack: (result: ActionAck) => void) => void;
+  /** Hand the host role to another connected player. */
+  "host:transfer": (
+    payload: z.input<typeof TransferHostPayloadSchema>,
+    ack: (result: ActionAck) => void,
+  ) => void;
 }

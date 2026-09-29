@@ -1,7 +1,17 @@
 "use client";
 
 import type { PlayerDTO, PlayerRole } from "@puzzle/shared";
-import { Ban, Eye, RotateCcw, UserMinus, UserRoundPlus, UserX, Users, X } from "lucide-react";
+import {
+  Ban,
+  Crown,
+  Eye,
+  RotateCcw,
+  UserMinus,
+  UserRoundPlus,
+  UserX,
+  Users,
+  X,
+} from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { RoomController } from "@/lib/realtime/room-controller";
 import { cn } from "@/lib/utils";
@@ -236,6 +246,11 @@ function PersonRow({
               onClick={() => moveTo("player")}
             >
               <UserRoundPlus />
+            </IconButton>
+          )}
+          {isHost && !isMe && player.connected && (
+            <IconButton label="Host qilish" onClick={() => void controller.transferHost(player.id)}>
+              <Crown />
             </IconButton>
           )}
           {isHost && !isMe && (

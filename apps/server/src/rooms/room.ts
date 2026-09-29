@@ -1,4 +1,5 @@
 import {
+  HOST_HANDOFF_MS,
   LOCK_TIMEOUT_MS,
   MAX_VIEWERS_PER_ROOM,
   PuzzleState,
@@ -38,6 +39,8 @@ interface PlayerRecord {
   dto: PlayerDTO;
   socketId: string | null;
   disconnectedAt: number | null;
+  /** When they entered the room (the longest-present player inherits the host role). */
+  joinedAt: number;
 }
 
 interface Lock {
@@ -64,6 +67,10 @@ export class Room {
   private readonly locks = new Map<number, Lock>();
   private stats: Record<string, PlayerStatsDTO>;
   private readonly banned: Set<string>;
+  /** Public id of the current host (starts as the creator, can move). */
+  private hostPlayerId: string;
+  /** Since when the host has been away (null while connected). */
+  private hostAwaySince: number | null;
   private readonly now: () => number;
   /** Set whenever the puzzle changes; cleared by the manager after saving. */
   dirty = false;
@@ -102,6 +109,9 @@ export class Room {
       : PuzzleState.create(config, record.seed);
     this.stats = record.stats ?? {};
     this.banned = new Set(record.banned);
+    this.hostPlayerId = record.hostPlayerId ?? publicPlayerId(record.hostId);
+    // Nobody is connected when a room is (re)loaded, the host included.
+    this.hostAwaySince = this.now();
     this.lastActiveAt = this.now();
   }
 
@@ -159,6 +169,7 @@ export class Room {
         avatar: payload.avatar,
         connected: true,
       };
+      if (playerId === this.hostPlayerId) this.hostAwaySince = null;
       this.lastActiveAt = this.now();
       this.emit.others(socketId, "player:updated", existing.dto);
       return { ok: true, state: this.stateFor(playerId), replacedSocketId };
@@ -172,17 +183,19 @@ export class Room {
     const player: PlayerRecord = {
       socketId,
       disconnectedAt: null,
+      joinedAt: this.now(),
       dto: {
         id: playerId,
         name: this.uniqueName(payload.name, playerId),
         color: payload.color,
         avatar: payload.avatar,
         connected: true,
-        isHost: payload.clientId === this.hostId,
+        isHost: playerId === this.hostPlayerId,
         role,
       },
     };
     this.players.set(playerId, player);
+    if (playerId === this.hostPlayerId) this.hostAwaySince = null;
     if (role === "player") this.stats[playerId] ??= { merges: 0 };
     this.lastActiveAt = this.now();
     this.emit.others(socketId, "player:joined", player.dto);
@@ -193,6 +206,7 @@ export class Room {
   disconnect(playerId: string, socketId: string) {
     const player = this.players.get(playerId);
     if (!player || player.socketId !== socketId) return;
+    if (playerId === this.hostPlayerId) this.hostAwaySince = this.now();
     if (player.dto.role === "viewer" && !player.dto.isHost) {
       this.players.delete(playerId);
       this.lastActiveAt = this.now();
@@ -281,6 +295,45 @@ export class Room {
     if (role === "player" && !this.hasFreeSeat) return { ok: false, error: "full" };
     this.setRoleOf(target, role);
     return { ok: true };
+  }
+
+  /** The host hands their role to another connected player. */
+  transferHost(hostId: string, targetId: string): ActionAck {
+    if (!this.isHostPlayer(hostId)) return { ok: false, error: "not_host" };
+    if (targetId === hostId) return { ok: false, error: "invalid" };
+    const target = this.players.get(targetId);
+    if (!target?.dto.connected) return { ok: false, error: "not_found" };
+    this.setHost(targetId);
+    return { ok: true };
+  }
+
+  private setHost(playerId: string) {
+    const previous = this.players.get(this.hostPlayerId);
+    if (previous) {
+      previous.dto = { ...previous.dto, isHost: false };
+      this.emit.all("player:updated", previous.dto);
+    }
+    this.hostPlayerId = playerId;
+    const next = this.players.get(playerId);
+    if (next) {
+      next.dto = { ...next.dto, isHost: true };
+      this.emit.all("player:updated", next.dto);
+    }
+    this.hostAwaySince = next?.dto.connected ? null : this.now();
+    this.dirty = true;
+  }
+
+  /** The host has been away too long: the longest-present connected player (seated first) takes over. */
+  private handOffHostIfAway(now: number) {
+    if (this.hostAwaySince === null || now - this.hostAwaySince < HOST_HANDOFF_MS) return;
+    const candidates = [...this.players.values()]
+      .filter((p) => p.dto.connected && p.dto.id !== this.hostPlayerId)
+      .sort(
+        (a, b) =>
+          Number(b.dto.role === "player") - Number(a.dto.role === "player") || a.joinedAt - b.joinedAt,
+      );
+    const successor = candidates[0];
+    if (successor) this.setHost(successor.dto.id);
   }
 
   /** Scrambles the puzzle again (same picture and piece shapes), clears the timer and stats. */
@@ -426,6 +479,7 @@ export class Room {
         this.emit.all("piece:released", groupId);
       }
     }
+    this.handOffHostIfAway(now);
     for (const [playerId, player] of this.players) {
       if (
         !player.dto.connected &&
@@ -469,6 +523,7 @@ export class Room {
       startedAt: new Date(this.info.startedAt),
       completedAt: this.info.completedAt ? new Date(this.info.completedAt) : null,
       banned: [...this.banned],
+      hostPlayerId: this.hostPlayerId,
     };
   }
 }

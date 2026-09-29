@@ -57,9 +57,14 @@ describe.skipIf(!url)("PrismaRoomRepository", () => {
       startedAt: new Date(),
       completedAt: new Date(),
       banned: ["someone"],
+      hostPlayerId: "new-host-id",
     });
     const loaded = await repo.loadRoom(created.id);
-    expect(loaded).toMatchObject({ status: "COMPLETED", stats: { host_client_1: { merges: 3 } } });
+    expect(loaded).toMatchObject({
+      status: "COMPLETED",
+      stats: { host_client_1: { merges: 3 } },
+      hostPlayerId: "new-host-id",
+    });
     expect(loaded?.state?.groups[0]?.placed).toBe(true);
     expect(await repo.loadRoom("missing-room")).toBeNull();
   });

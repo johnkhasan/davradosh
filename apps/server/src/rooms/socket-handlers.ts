@@ -5,6 +5,7 @@ import {
   JoinPayloadSchema,
   KickPayloadSchema,
   SetRolePayloadSchema,
+  TransferHostPayloadSchema,
   MovePayloadSchema,
   ReactionPayloadSchema,
   ViewportPayloadSchema,
@@ -210,6 +211,19 @@ export function registerSocketHandlers(
       const result = ctx.room.setRole(ctx.playerId, data.playerId, data.role);
       // Voice rights depend on the role: drop the LiveKit session so it reconnects with new ones.
       if (result.ok) void voice?.removeParticipant(ctx.room.id, data.playerId);
+      ack(result);
+    });
+
+    socket.on("host:transfer", async (payload, ack) => {
+      if (typeof ack !== "function") return;
+      const data = parse(TransferHostPayloadSchema, payload);
+      const ctx = data && (await current());
+      if (!ctx) return ack(invalid);
+      const result = ctx.room.transferHost(ctx.playerId, data.playerId);
+      if (result.ok) {
+        logger.info({ roomId: ctx.room.id, to: data.playerId }, "host transferred");
+        void manager.save(ctx.room);
+      }
       ack(result);
     });
 

@@ -20,6 +20,9 @@ export const CURSOR_SEND_INTERVAL_MS = 40;
 /** A group lock expires if the holder sends no updates for this long. */
 export const LOCK_TIMEOUT_MS = 10_000;
 
+/** If the host stays disconnected this long, the longest-present player becomes host. */
+export const HOST_HANDOFF_MS = 30_000;
+
 /** A disconnected player's seat stays reserved for this long. */
 export const SEAT_RESERVATION_MS = 30_000;
 
