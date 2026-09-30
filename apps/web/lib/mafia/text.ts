@@ -58,11 +58,11 @@ export function phaseTitle(view: MafiaView): string {
     case "lastWords":
       return "Oxirgi so'z";
     case "shoot":
-      return "Mafiya ovga chiqdi";
+      return "Mafiya ovda";
     case "donCheck":
-      return "Don Sherifni qidiryapti";
+      return "Don qidiryapti";
     case "sheriffCheck":
-      return "Sherif tekshiryapti";
+      return "Sherif tekshiradi";
     case "bestMove":
       return "Eng yaxshi yurish";
     case "dawn":

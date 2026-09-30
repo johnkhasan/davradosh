@@ -51,7 +51,7 @@ function canPick(view: MafiaView, action: PickAction, seat: MafiaSeatView): bool
       return seat.alive;
     case "check":
     case "bestMove":
-      return seat.seat !== view.me;
+      return seat.alive && seat.seat !== view.me;
   }
 }
 
@@ -86,16 +86,18 @@ export function MafiaGameScreen({
   const toggle = (seat: MafiaSeatView) => {
     if (!action || !canPick(view, action, seat)) return;
     setError(null);
-    if (action === "bestMove") {
-      const next = picked.includes(seat.seat)
-        ? picked.filter((s) => s !== seat.seat)
-        : picked.length < BEST_MOVE_SIZE
-          ? [...picked, seat.seat]
-          : picked;
-      setPick({ step, seats: next });
-    } else {
-      setPick({ step, seats: picked[0] === seat.seat ? [] : [seat.seat] });
-    }
+    // Functional updates: quick taps in a row must all count, not just the last one.
+    setPick((previous) => {
+      const current = previous.step === step ? previous.seats : [];
+      if (action !== "bestMove")
+        return { step, seats: current[0] === seat.seat ? [] : [seat.seat] };
+      const seats = current.includes(seat.seat)
+        ? current.filter((s) => s !== seat.seat)
+        : current.length < BEST_MOVE_SIZE
+          ? [...current, seat.seat]
+          : current;
+      return { step, seats };
+    });
   };
 
   const run = async (call: () => Promise<{ ok: boolean; error?: string }>) => {
@@ -131,9 +133,11 @@ export function MafiaGameScreen({
 
       <main className="mx-auto w-full max-w-4xl px-3 pt-3 pb-40 sm:px-4">
         {view.phase === "roleReveal" && me?.role && <RoleCard seat={me} view={view} />}
+        {view.phase === "dawn" && <DawnBanner view={view} />}
+        <VoteTally view={view} />
 
         {view.phase === "gameOver" && view.result && (
-          <section className="rounded-card bg-gradient-to-br from-primary to-[#4b3bc9] p-6 text-center text-white shadow-soft-lg">
+          <section className="mafia-dawn rounded-card bg-gradient-to-br from-primary to-[#4b3bc9] p-6 text-center text-white shadow-soft-lg">
             <div className="text-5xl" aria-hidden>
               {view.result === "red" ? "🏙️" : view.result === "black" ? "🕶️" : "🤝"}
             </div>
@@ -226,7 +230,11 @@ function PhaseBar({
           <span
             className={cn(
               "rounded-full px-3 py-1 font-mono text-lg font-semibold tabular-nums",
-              seconds <= 5 ? "bg-danger text-white" : night ? "bg-white/10" : "bg-surface-muted",
+              seconds <= 5
+                ? "mafia-urgent bg-danger text-white"
+                : night
+                  ? "bg-white/10"
+                  : "bg-surface-muted",
             )}
             aria-label={`${seconds} soniya qoldi`}
           >
@@ -248,7 +256,7 @@ function PhaseBar({
             ) : (
               <Eye className="size-4" aria-hidden />
             )}
-            {me.seat}-raqam
+            <span className="font-mono">№{me.seat}</span>
             {showRole && ` · ${ROLE_TEXT[me.role].emoji} ${ROLE_TEXT[me.role].name}`}
           </button>
         )}
@@ -262,7 +270,7 @@ function RoleCard({ seat, view }: { seat: MafiaSeatView; view: MafiaView }) {
   const role = ROLE_TEXT[seat.role!];
   const team = view.seats.filter((s) => s.role !== null && s.seat !== seat.seat);
   return (
-    <section className="mx-auto mt-4 max-w-sm">
+    <section className="mafia-enter mx-auto mt-4 max-w-sm">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -305,7 +313,7 @@ function RoleCard({ seat, view }: { seat: MafiaSeatView; view: MafiaView }) {
 
 function SleepingCity({ view }: { view: MafiaView }) {
   return (
-    <section className="flex min-h-[50dvh] flex-col items-center justify-center gap-3 text-center">
+    <section className="mafia-enter flex min-h-[50dvh] flex-col items-center justify-center gap-3 text-center">
       <div className="text-6xl" aria-hidden>
         🌙
       </div>
@@ -339,7 +347,9 @@ function SeatCard({
   onSelect: () => void;
 }) {
   const speaking = view.speaker === seat.seat;
-  const nominated = view.nominations.findIndex((n) => n.seat === seat.seat);
+  // Nominations only mean something during the day's discussion and vote.
+  const dayPhase = ["speech", "voting", "tieSpeech", "liftAllVote"].includes(view.phase);
+  const nominated = dayPhase ? view.nominations.findIndex((n) => n.seat === seat.seat) : -1;
   const check = [...view.checks].reverse().find((c) => c.seat === seat.seat);
   const role = seat.role ? ROLE_TEXT[seat.role] : null;
   const mine = seat.seat === view.me;
@@ -378,7 +388,7 @@ function SeatCard({
           night ? "border-white/10 bg-white/5" : "border-border bg-surface shadow-soft-sm",
           mine && (night ? "border-white/40" : "border-primary"),
           speaking && "ring-2 ring-snap ring-offset-2 ring-offset-transparent",
-          talking && "shadow-[0_0_0_4px_rgb(0_194_168/0.35)]",
+          talking && "mafia-talking",
           selectable && "cursor-pointer hover:-translate-y-0.5",
           selected && "ring-4 ring-primary",
           !seat.alive && "opacity-45 grayscale",
@@ -413,6 +423,82 @@ function SeatCard({
         )}
       </button>
     </li>
+  );
+}
+
+/** Morning news, big: who was shot (or nobody) and the best move of the first victim. */
+function DawnBanner({ view }: { view: MafiaView }) {
+  const nightStart = view.log.map((e) => e.type).lastIndexOf("night");
+  const tonight = view.log.slice(nightStart + 1);
+  const killed = tonight.find((e) => e.type === "killed");
+  const best = tonight.find((e) => e.type === "bestMove");
+  const name = (seat: number) => view.seats.find((s) => s.seat === seat)?.name ?? "";
+  return (
+    <section
+      role="status"
+      className="mafia-dawn mt-4 rounded-card bg-gradient-to-br from-[#ffb86b] to-[#c2477a] p-6 text-center text-white shadow-soft-lg"
+    >
+      <div className="text-5xl" aria-hidden>
+        {killed ? "🔫" : "🌅"}
+      </div>
+      <h2 className="mt-2 font-display text-2xl font-bold">
+        {killed?.type === "killed"
+          ? `Kechasi ${killed.seat}-raqam — ${name(killed.seat)} o'ldirildi`
+          : "O'q tegmadi: bu kecha hech kim o'lmadi"}
+      </h2>
+      {killed && <p className="mt-1 text-white/85">Hozir oxirgi so&apos;zini aytadi.</p>}
+      {best?.type === "bestMove" && (
+        <p className="mt-3 rounded-control bg-black/15 px-3 py-2 text-sm">
+          🎯 Eng yaxshi yurish: {best.seats.map((s) => `${s}-raqam`).join(", ")}
+        </p>
+      )}
+    </section>
+  );
+}
+
+/** The latest vote of the day as bars, shown from the count until the night starts. */
+function VoteTally({ view }: { view: MafiaView }) {
+  const lastVotes = view.log.map((e) => e.type).lastIndexOf("votes");
+  const lastDay = view.log.map((e) => e.type).lastIndexOf("day");
+  const lastNight = view.log.map((e) => e.type).lastIndexOf("night");
+  const event = view.log[lastVotes];
+  if (!event || event.type !== "votes" || lastVotes < lastDay || lastNight > lastVotes) return null;
+  if (view.phase === "gameOver" || view.phase === "voting") return null;
+  const voters = event.tally.reduce((sum, t) => sum + t.voters.length, 0) || 1;
+  const most = Math.max(...event.tally.map((t) => t.voters.length));
+  const name = (seat: number) => view.seats.find((s) => s.seat === seat)?.name ?? "";
+  return (
+    <section className="mafia-enter mt-4 rounded-card border border-border bg-surface p-4 shadow-soft-sm">
+      <h2 className="font-display text-lg font-bold">
+        Ovoz natijalari{event.round > 1 ? " (qayta ovoz)" : ""}
+      </h2>
+      <ol className="mt-3 space-y-2.5">
+        {event.tally.map((t) => (
+          <li key={t.seat}>
+            <div className="flex items-baseline justify-between gap-2 text-sm">
+              <span className="font-medium">
+                {t.seat}-raqam · {name(t.seat)}
+              </span>
+              <span className="text-muted tabular-nums">{t.voters.length} ovoz</span>
+            </div>
+            <div className="mt-1 h-2.5 overflow-hidden rounded-full bg-surface-muted">
+              <div
+                className={cn(
+                  "mafia-bar h-full rounded-full",
+                  t.voters.length === most ? "bg-danger" : "bg-primary/60",
+                )}
+                style={{ width: `${(t.voters.length / voters) * 100}%` }}
+              />
+            </div>
+            {t.voters.length > 0 && (
+              <p className="mt-0.5 text-xs text-muted">
+                {t.voters.map((v) => `${v}`).join(", ")}-raqamlar
+              </p>
+            )}
+          </li>
+        ))}
+      </ol>
+    </section>
   );
 }
 

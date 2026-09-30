@@ -437,6 +437,14 @@ describe("MafiaGame: night (4.5)", () => {
     expect(game.viewFor(null).checks).toEqual([]);
   });
 
+  it("only checks players who are still at the table", () => {
+    const game = fixedGame();
+    voteOutToday(game, 5);
+    until(game, "donCheck");
+    expect(game.check(id(game, DON), 5)).toEqual({ ok: false, error: "invalid_target" });
+    expect(game.check(id(game, DON), 4)).toEqual({ ok: true });
+  });
+
   it("runs every night step at full length even when its role is out, and hides them all", () => {
     const game = fixedGame();
     voteOutToday(game, DON);

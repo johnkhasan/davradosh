@@ -520,7 +520,8 @@ export class MafiaGame {
     if (role === "don" ? this.donChecked : this.sheriffChecked) {
       return { ok: false, error: "already_done" };
     }
-    if (target !== undefined && (target === seat.seat || !this.bySeat.has(target))) {
+    // Only players still at the table can be checked.
+    if (target !== undefined && (target === seat.seat || !this.isAlive(target))) {
       return { ok: false, error: "invalid_target" };
     }
     return { ok: true };
@@ -536,7 +537,7 @@ export class MafiaGame {
       seats !== undefined &&
       (seats.length !== BEST_MOVE_SIZE ||
         new Set(seats).size !== seats.length ||
-        seats.some((s) => s === seat.seat || !this.bySeat.has(s)))
+        seats.some((s) => s === seat.seat || !this.isAlive(s)))
     ) {
       return { ok: false, error: "invalid_target" };
     }
