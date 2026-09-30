@@ -36,6 +36,34 @@ export interface MafiaGameOptions {
   timings?: Partial<MafiaTimings>;
 }
 
+/** JSON-safe copy of a game, for persistence. Contains the roles: never send it to a client. */
+export interface MafiaGameSnapshot {
+  version: 1;
+  savedAt: number;
+  seats: SeatState[];
+  phase: Phase;
+  day: number;
+  night: number;
+  firstSpeaker: number;
+  nominations: Array<{ seat: number; by: number }>;
+  votes: Array<[number, number]>;
+  liftVotes: Array<[number, boolean]>;
+  skipVoting: boolean;
+  day1Exits: number;
+  shots: Array<[number, number]>;
+  donChecked: boolean;
+  sheriffChecked: boolean;
+  donChecks: MafiaCheckView[];
+  sheriffChecks: MafiaCheckView[];
+  killedTonight: number | null;
+  bestMoveSeat: number | null;
+  bestMovePick: number[] | null;
+  announcedBestMove: { seat: number; seats: number[] } | null;
+  nightsUnchanged: number;
+  events: MafiaEvent[];
+  result: MafiaResult | null;
+}
+
 interface SeatState {
   seat: number;
   playerId: string;
@@ -70,6 +98,9 @@ type Phase =
   | { kind: "bestMove"; endsAt: number }
   | { kind: "dawn"; endsAt: number }
   | { kind: "gameOver"; endsAt: number };
+
+/** Set only while MafiaGame.restore runs its constructor. */
+let restoring: MafiaGameSnapshot | null = null;
 
 export class MafiaGame {
   private readonly timings: MafiaTimings;
@@ -107,15 +138,21 @@ export class MafiaGame {
   private finalResult: MafiaResult | null = null;
 
   constructor(players: MafiaPlayerInput[], now: number, options: MafiaGameOptions = {}) {
+    this.timings = { ...MAFIA_TIMINGS, ...options.timings };
+    this.random = options.random ?? ((max) => randomInt(max));
+    if (restoring) {
+      // See MafiaGame.restore: the seats come from the snapshot, nothing is dealt.
+      this.seats = restoring.seats.map((seat) => ({ ...seat }));
+      this.indexSeats();
+      this.phaseState = { kind: "roleReveal", endsAt: now };
+      return;
+    }
     if (players.length !== MAFIA_PLAYERS) {
       throw new Error(`mafia needs exactly ${MAFIA_PLAYERS} players, got ${players.length}`);
     }
     if (new Set(players.map((p) => p.id)).size !== players.length) {
       throw new Error("player ids must be unique");
     }
-    this.timings = { ...MAFIA_TIMINGS, ...options.timings };
-    this.random = options.random ?? ((max) => randomInt(max));
-
     // Seats and roles are dealt independently, both uniformly at random.
     const order = this.shuffle(players);
     const deck = this.shuffle(MAFIA_ROLE_DECK);
@@ -128,11 +165,91 @@ export class MafiaGame {
       exit: null,
       connected: true,
     }));
+    this.indexSeats();
+    this.phaseState = { kind: "roleReveal", endsAt: now + this.timings.roleReveal };
+  }
+
+  private indexSeats() {
     for (const seat of this.seats) {
       this.bySeat.set(seat.seat, seat);
       this.byPlayer.set(seat.playerId, seat);
     }
-    this.phaseState = { kind: "roleReveal", endsAt: now + this.timings.roleReveal };
+  }
+
+  // ---------------------------------------------------------------- persistence
+
+  snapshot(now: number): MafiaGameSnapshot {
+    return structuredClone({
+      version: 1 as const,
+      savedAt: now,
+      seats: this.seats,
+      phase: this.phaseState,
+      day: this.day,
+      night: this.night,
+      firstSpeaker: this.firstSpeaker,
+      nominations: this.nominations,
+      votes: [...this.votes],
+      liftVotes: [...this.liftVotes],
+      skipVoting: this.skipVoting,
+      day1Exits: this.day1Exits,
+      shots: [...this.shots],
+      donChecked: this.donChecked,
+      sheriffChecked: this.sheriffChecked,
+      donChecks: this.donChecks,
+      sheriffChecks: this.sheriffChecks,
+      killedTonight: this.killedTonight,
+      bestMoveSeat: this.bestMoveSeat,
+      bestMovePick: this.bestMovePick,
+      announcedBestMove: this.announcedBestMove,
+      nightsUnchanged: this.nightsUnchanged,
+      events: this.events,
+      result: this.finalResult,
+    });
+  }
+
+  /**
+   * Rebuilds a game from a snapshot. The current phase keeps the time it had left when it was
+   * saved, counted from `now`, so a server restart never cuts a speech or a night short.
+   */
+  static restore(
+    snapshot: MafiaGameSnapshot,
+    now: number,
+    options: MafiaGameOptions = {},
+  ): MafiaGame {
+    const data = structuredClone(snapshot);
+    restoring = data;
+    let game: MafiaGame;
+    try {
+      game = new MafiaGame([], now, options);
+    } finally {
+      restoring = null;
+    }
+    const remaining = Math.max(0, data.phase.endsAt - data.savedAt);
+    game.phaseState = {
+      ...data.phase,
+      endsAt: data.phase.kind === "gameOver" ? now : now + remaining,
+    };
+    game.day = data.day;
+    game.night = data.night;
+    game.firstSpeaker = data.firstSpeaker;
+    game.nominations = data.nominations;
+    for (const [voter, target] of data.votes) game.votes.set(voter, target);
+    for (const [voter, agree] of data.liftVotes) game.liftVotes.set(voter, agree);
+    game.skipVoting = data.skipVoting;
+    game.day1Exits = data.day1Exits;
+    for (const [shooter, target] of data.shots) game.shots.set(shooter, target);
+    game.donChecked = data.donChecked;
+    game.sheriffChecked = data.sheriffChecked;
+    game.donChecks.push(...data.donChecks);
+    game.sheriffChecks.push(...data.sheriffChecks);
+    game.killedTonight = data.killedTonight;
+    game.bestMoveSeat = data.bestMoveSeat;
+    game.bestMovePick = data.bestMovePick;
+    game.announcedBestMove = data.announcedBestMove;
+    game.nightsUnchanged = data.nightsUnchanged;
+    game.events.push(...data.events);
+    game.finalResult = data.result;
+    return game;
   }
 
   // ---------------------------------------------------------------- read access (server only)

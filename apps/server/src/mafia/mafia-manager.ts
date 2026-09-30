@@ -1,0 +1,150 @@
+import type { FastifyBaseLogger } from "fastify";
+import { publicPlayerId, randomId } from "../lib/ids";
+import type { MafiaGameOptions } from "./game";
+import { MafiaRoom, type MafiaRoomEmitter, type MafiaRoomOptions } from "./mafia-room";
+import type { MafiaRepository } from "./repository";
+
+/** Mafia rooms are short-lived: one evening of games. */
+export const MAFIA_ROOM_TTL_MS = 24 * 60 * 60_000;
+
+export interface MafiaManagerOptions {
+  repository: MafiaRepository;
+  createEmitter: (roomId: string) => MafiaRoomEmitter;
+  logger: FastifyBaseLogger;
+  /** Shorter phase lengths in tests. */
+  game?: MafiaGameOptions;
+  room?: Omit<MafiaRoomOptions, "game" | "now">;
+  now?: () => number;
+  /** How often phase timers are checked. */
+  tickMs?: number;
+  saveIntervalMs?: number;
+  idleUnloadMs?: number;
+}
+
+/**
+ * Keeps live mafia rooms in memory, drives their timers, persists them and unloads
+ * idle ones. Same shape as the puzzle RoomManager, but mafia phases need a faster tick.
+ */
+export class MafiaRoomManager {
+  private readonly rooms = new Map<string, MafiaRoom>();
+  private readonly loading = new Map<string, Promise<MafiaRoom | null>>();
+  private readonly now: () => number;
+  private readonly tickMs: number;
+  private readonly saveIntervalMs: number;
+  private readonly idleUnloadMs: number;
+  private timers: NodeJS.Timeout[] = [];
+
+  constructor(private readonly opts: MafiaManagerOptions) {
+    this.now = opts.now ?? Date.now;
+    this.tickMs = opts.tickMs ?? 250;
+    this.saveIntervalMs = opts.saveIntervalMs ?? 5_000;
+    this.idleUnloadMs = opts.idleUnloadMs ?? 10 * 60_000;
+  }
+
+  start() {
+    this.timers = [
+      setInterval(() => this.tick(), this.tickMs),
+      setInterval(() => void this.saveDirty(), this.saveIntervalMs),
+      setInterval(() => void this.deleteExpired(), 60 * 60_000),
+    ];
+    void this.deleteExpired();
+  }
+
+  async stop() {
+    for (const timer of this.timers) clearInterval(timer);
+    this.timers = [];
+    await this.saveDirty();
+  }
+
+  async create(clientId: string): Promise<string> {
+    const room = await this.opts.repository.createRoom({
+      id: randomId(8),
+      hostId: publicPlayerId(clientId),
+      expiresAt: new Date(this.now() + MAFIA_ROOM_TTL_MS),
+    });
+    return room.id;
+  }
+
+  /** The live room, loading it from storage on first access. */
+  async get(roomId: string): Promise<MafiaRoom | null> {
+    const existing = this.rooms.get(roomId);
+    if (existing) return existing;
+    let pending = this.loading.get(roomId);
+    if (!pending) {
+      pending = this.load(roomId).finally(() => this.loading.delete(roomId));
+      this.loading.set(roomId, pending);
+    }
+    return pending;
+  }
+
+  /** Public numbers for link previews, without loading the room. */
+  async peek(roomId: string) {
+    const live = this.rooms.get(roomId);
+    if (live) return live.summary;
+    const record = await this.opts.repository.loadRoom(roomId);
+    if (!record || record.expiresAt.getTime() <= this.now()) return null;
+    const players = record.members.filter((m) => !m.spectator).length;
+    return {
+      id: record.id,
+      status: record.status,
+      players,
+      spectators: record.members.length - players,
+    };
+  }
+
+  async save(room: MafiaRoom) {
+    room.dirty = false;
+    try {
+      await this.opts.repository.saveRoom(room.id, room.persistable());
+    } catch (error) {
+      room.dirty = true;
+      this.opts.logger.error({ err: error, roomId: room.id }, "failed to save mafia room");
+    }
+  }
+
+  get activeRooms(): number {
+    return this.rooms.size;
+  }
+
+  private async load(roomId: string): Promise<MafiaRoom | null> {
+    const record = await this.opts.repository.loadRoom(roomId);
+    if (!record || record.expiresAt.getTime() <= this.now()) return null;
+    const room = new MafiaRoom(record, this.opts.createEmitter(roomId), {
+      ...this.opts.room,
+      game: this.opts.game,
+      now: this.now,
+    });
+    this.rooms.set(roomId, room);
+    this.opts.logger.info({ roomId }, "mafia room loaded");
+    return room;
+  }
+
+  private tick() {
+    const now = this.now();
+    for (const room of this.rooms.values()) {
+      try {
+        room.tick();
+      } catch (error) {
+        this.opts.logger.error({ err: error, roomId: room.id }, "mafia room tick failed");
+      }
+      if (room.connectedCount === 0 && now - room.lastActiveAt > this.idleUnloadMs) {
+        this.rooms.delete(room.id);
+        void this.save(room);
+        this.opts.logger.info({ roomId: room.id }, "mafia room unloaded");
+      }
+    }
+  }
+
+  private async saveDirty() {
+    await Promise.all([...this.rooms.values()].filter((r) => r.dirty).map((r) => this.save(r)));
+  }
+
+  private async deleteExpired() {
+    try {
+      const count = await this.opts.repository.deleteExpiredRooms(new Date(this.now()));
+      if (count > 0) this.opts.logger.info({ count }, "expired mafia rooms deleted");
+    } catch (error) {
+      this.opts.logger.error({ err: error }, "failed to delete expired mafia rooms");
+    }
+  }
+}

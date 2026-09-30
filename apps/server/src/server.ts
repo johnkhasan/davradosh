@@ -4,6 +4,16 @@ import rateLimit from "@fastify/rate-limit";
 import fastifyStatic from "@fastify/static";
 import { buildApp } from "./app";
 import type { Env } from "./env";
+import type { MafiaGameOptions } from "./mafia/game";
+import { MafiaRoomManager } from "./mafia/mafia-manager";
+import type { MafiaRoomOptions } from "./mafia/mafia-room";
+import { MemoryMafiaRepository, type MafiaRepository } from "./mafia/repository";
+import { mafiaRoutes } from "./mafia/routes";
+import {
+  createMafiaEmitter,
+  registerMafiaHandlers,
+  type MafiaNamespace,
+} from "./mafia/socket-handlers";
 import { GalleryService } from "./images/gallery";
 import { ImageStore } from "./images/image-store";
 import type { RoomRepository } from "./rooms/repository";
@@ -35,13 +45,28 @@ export interface GameServerDeps {
     | "LIVEKIT_SERVICE_URL"
   >;
   repository: RoomRepository;
+  /** Mafia rooms; in memory when omitted. */
+  mafiaRepository?: MafiaRepository;
+  /** Shorter mafia timers in tests. */
+  mafia?: {
+    game?: MafiaGameOptions;
+    room?: Omit<MafiaRoomOptions, "game" | "now">;
+    tickMs?: number;
+  };
   checkDb: () => Promise<boolean>;
   /** Injected in tests to fake gallery providers. */
   fetch?: typeof fetch;
 }
 
 /** Fastify + Socket.IO + rooms + images, fully wired but not listening yet. */
-export async function createGameServer({ env, repository, checkDb, fetch }: GameServerDeps) {
+export async function createGameServer({
+  env,
+  repository,
+  mafiaRepository = new MemoryMafiaRepository(),
+  mafia: mafiaOptions,
+  checkDb,
+  fetch,
+}: GameServerDeps) {
   const app = await buildApp({ env, checkDb });
   await app.register(rateLimit, { global: false });
 
@@ -89,12 +114,27 @@ export async function createGameServer({ env, repository, checkDb, fetch }: Game
   }
   registerSocketHandlers(io, manager, app.log, voice);
 
+  // Mafia: its own Socket.IO namespace, so puzzle traffic and events stay untouched.
+  const mafiaNsp = io.of("/mafia") as unknown as MafiaNamespace;
+  const mafia = new MafiaRoomManager({
+    repository: mafiaRepository,
+    createEmitter: () => createMafiaEmitter(mafiaNsp),
+    logger: app.log,
+    game: mafiaOptions?.game,
+    room: mafiaOptions?.room,
+    tickMs: mafiaOptions?.tickMs,
+  });
+  await app.register(mafiaRoutes, { manager: mafia });
+  registerMafiaHandlers(mafiaNsp, mafia, app.log);
+
   return {
     app,
     io,
     manager,
+    mafia,
     async close() {
       await manager.stop();
+      await mafia.stop();
       io.close();
       await app.close();
     },

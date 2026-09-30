@@ -58,3 +58,28 @@ model Image {
   createdAt DateTime @default(now())
   rooms     Room[]
 }
+
+enum MafiaStatus {
+  LOBBY
+  PLAYING
+}
+
+/// A mafia room (see mafia-plan.md). `game` holds the roles: it never leaves the server.
+model MafiaRoom {
+  /// nanoid(8), used in the share link: /mafia/{id}
+  id        String      @id
+  /// Public player id of the current host
+  hostId    String
+  status    MafiaStatus @default(LOBBY)
+  /// Room members (players and spectators) without socket data
+  members   Json        @default("[]")
+  /// MafiaGameSnapshot of the game in progress or just finished
+  game      Json?
+  /// Public player ids the host kicked with a ban
+  banned    String[]    @default([])
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  expiresAt DateTime
+
+  @@index([expiresAt])
+}

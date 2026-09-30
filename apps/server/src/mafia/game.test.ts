@@ -721,3 +721,29 @@ describe("MafiaGame: secrecy", () => {
     }
   }, 120_000);
 });
+
+describe("MafiaGame: persistence", () => {
+  it("restores a snapshot with the same views, keeping the phase's remaining time", () => {
+    const game = fixedGame();
+    voteOutToday(game, 5);
+    until(game, "shoot");
+    game.shoot(id(game, 8), 2);
+    const savedAt = game.endsAt - 4_000; // 4 s into the 10 s shooting step
+    const snapshot = JSON.parse(JSON.stringify(game.snapshot(savedAt)));
+
+    const restored = MafiaGame.restore(snapshot, 1_000_000);
+    expect(restored.phase).toBe("shoot");
+    expect(restored.endsAt).toBe(1_000_000 + 4_000);
+    for (const player of [null, ...players.map((p) => p.id)]) {
+      const { endsAt: _a, ...before } = game.viewFor(player);
+      const { endsAt: _b, ...after } = restored.viewFor(player);
+      expect(after).toEqual(before);
+    }
+    // The night goes on where it stopped: seat 8 already shot, the others still can.
+    expect(restored.shoot(id(restored, 8), 3)).toEqual({ ok: false, error: "already_done" });
+    restored.shoot(id(restored, 9), 2);
+    restored.shoot(id(restored, 10), 2);
+    until(restored, "dawn");
+    expect(events(restored, "killed").at(-1)).toEqual({ type: "killed", seat: 2 });
+  });
+});
