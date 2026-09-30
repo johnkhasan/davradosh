@@ -1,9 +1,37 @@
-import { RoomIdSchema } from "@puzzle/shared";
+import { ClientIdSchema, RoomIdSchema } from "@puzzle/shared";
 import { CreateMafiaRoomSchema } from "@puzzle/shared/mafia";
 import type { FastifyInstance } from "fastify";
+import { z } from "zod";
+import { publicPlayerId } from "../lib/ids";
 import type { MafiaRoomManager } from "./mafia-manager";
+import type { MafiaVoiceSync } from "./voice-sync";
 
-export async function mafiaRoutes(app: FastifyInstance, opts: { manager: MafiaRoomManager }) {
+const TokenBody = z.object({ clientId: ClientIdSchema });
+
+export async function mafiaRoutes(
+  app: FastifyInstance,
+  opts: { manager: MafiaRoomManager; voice: MafiaVoiceSync | null },
+) {
+  /**
+   * LiveKit tokens for a member who is connected to the room right now. Publishing rights
+   * follow the phase; the night-room token only exists for the black team at the zero night.
+   */
+  app.post<{ Params: { id: string } }>(
+    "/api/mafia/rooms/:id/rtc-token",
+    { config: { rateLimit: { max: 60, timeWindow: "1 minute" } } },
+    async (request, reply) => {
+      if (!opts.voice) return reply.code(503).send({ error: "voice_disabled" });
+      const id = RoomIdSchema.safeParse(request.params.id);
+      const body = TokenBody.safeParse(request.body);
+      if (!id.success || !body.success) return reply.code(400).send({ error: "invalid" });
+      const room = await opts.manager.get(id.data);
+      if (!room) return reply.code(404).send({ error: "not_found" });
+      const tokens = await opts.voice.tokens(room, publicPlayerId(body.data.clientId));
+      if (!tokens) return reply.code(403).send({ error: "forbidden" });
+      return tokens;
+    },
+  );
+
   app.post(
     "/api/mafia/rooms",
     { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } },

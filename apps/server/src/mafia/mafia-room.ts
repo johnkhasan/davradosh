@@ -1,5 +1,6 @@
 import {
   MAFIA_PLAYERS,
+  teamOf,
   type MafiaActionResult,
   type MafiaJoinPayload,
   type MafiaMemberDTO,
@@ -333,6 +334,38 @@ export class MafiaRoom {
       serverNow: this.now(),
       game: this.game ? this.game.viewFor(playerId) : null,
     };
+  }
+
+  // ---------------------------------------------------------------- voice
+
+  /**
+   * Who may talk right now (mafia-plan.md §5). The server enforces it on LiveKit:
+   * lobby and game over — everyone; speeches and last words — only the speaker;
+   * votes and nights — nobody at the table; zero night — the living black team, in a
+   * separate night room.
+   */
+  voicePolicy(): { everyone: boolean; speakers: string[]; night: string[] } {
+    const game = this.game;
+    if (this.status !== "playing" || !game || game.phase === "gameOver") {
+      return { everyone: true, speakers: [], night: [] };
+    }
+    const speaker = game.speaker;
+    const night =
+      game.phase === "zeroNight"
+        ? game
+            .aliveSeats()
+            .filter((seat) => teamOf(game.roleAt(seat)!) === "black")
+            .map((seat) => game.playerAt(seat)!)
+        : [];
+    return { everyone: false, speakers: speaker === null ? [] : [game.playerAt(speaker)!], night };
+  }
+
+  /** Voice is only for people currently connected to the room. */
+  voiceMember(playerId: string) {
+    const member = this.members.get(playerId);
+    return member?.connected
+      ? { id: member.id, name: member.name, color: member.color, avatar: member.avatar }
+      : null;
   }
 
   /** Numbers for link previews: never anything secret. */

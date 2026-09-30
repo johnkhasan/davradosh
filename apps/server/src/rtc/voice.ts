@@ -68,4 +68,64 @@ export class VoiceService {
   async removeParticipant(roomId: string, identity: string) {
     await this.rooms.removeParticipant(roomId, identity).catch(() => undefined);
   }
+
+  // ---------------------------------------------------------------- generic (used by mafia)
+
+  /** Token for any LiveKit room, with publishing decided by the caller. */
+  async tokenFor(options: {
+    room: string;
+    identity: string;
+    name: string;
+    metadata?: string;
+    canPublish: boolean;
+  }): Promise<string> {
+    const token = new AccessToken(this.config.apiKey, this.config.apiSecret, {
+      identity: options.identity,
+      name: options.name,
+      metadata: options.metadata,
+      ttl: VOICE_TOKEN_TTL,
+    });
+    token.addGrant({
+      room: options.room,
+      roomJoin: true,
+      canPublish: options.canPublish,
+      canSubscribe: true,
+      canPublishData: false,
+      canUpdateOwnMetadata: false,
+    });
+    return token.toJwt();
+  }
+
+  /**
+   * Creates the room up front with its own participant limit (LiveKit's server-wide default
+   * is sized for puzzle rooms). Creating an existing room is a no-op on LiveKit's side.
+   */
+  async ensureRoom(name: string, maxParticipants: number) {
+    await this.rooms.createRoom({ name, maxParticipants, emptyTimeout: 300, departureTimeout: 20 });
+  }
+
+  async listParticipants(room: string) {
+    return this.rooms.listParticipants(room).catch(() => []);
+  }
+
+  /**
+   * Grants or revokes publishing. Revoking unpublishes the participant's tracks on the SFU,
+   * so it cannot be undone from the browser.
+   */
+  async setCanPublish(room: string, identity: string, canPublish: boolean) {
+    await this.rooms
+      .updateParticipant(room, identity, {
+        permission: {
+          canPublish,
+          canSubscribe: true,
+          canPublishData: false,
+          canUpdateMetadata: false,
+        },
+      })
+      .catch(() => undefined);
+  }
+
+  async deleteRoom(room: string) {
+    await this.rooms.deleteRoom(room).catch(() => undefined);
+  }
 }

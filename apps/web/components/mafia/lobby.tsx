@@ -7,15 +7,19 @@ import { useState } from "react";
 import { Avatar } from "@/components/game/ui";
 import { errorText } from "@/lib/mafia/text";
 import type { MafiaActions } from "@/lib/mafia/use-mafia-room";
+import type { MafiaVoiceHandle } from "@/lib/mafia/use-mafia-voice";
 import { cn } from "@/lib/utils";
+import { VoiceControls } from "./voice-controls";
 
 /** Gathering ten players: seats, invite link, ready flags and the host's start button. */
 export function MafiaLobby({
   state,
   actions,
+  voice,
 }: {
   state: MafiaRoomStateDTO;
   actions: MafiaActions;
+  voice: MafiaVoiceHandle;
 }) {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -49,9 +53,12 @@ export function MafiaLobby({
         <Link href="/mafia" className="font-display text-xl font-bold">
           🕵️ Mafia
         </Link>
-        <span className="text-sm text-muted tabular-nums">
-          {seated.length}/{MAFIA_PLAYERS} o&apos;yinchi
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-muted tabular-nums">
+            {seated.length}/{MAFIA_PLAYERS} o&apos;yinchi
+          </span>
+          <VoiceControls handle={voice} />
+        </div>
       </header>
 
       <h1 className="mt-8 font-display text-3xl font-bold">Stol yig&apos;ilmoqda</h1>
@@ -84,7 +91,12 @@ export function MafiaLobby({
 
       <ol className="mt-8 grid grid-cols-2 gap-2 sm:grid-cols-5">
         {Array.from({ length: MAFIA_PLAYERS }, (_, i) => (
-          <SeatSlot key={i} member={seated[i]} you={state.you} />
+          <SeatSlot
+            key={i}
+            member={seated[i]}
+            you={state.you}
+            speaking={seated[i] ? Boolean(voice.snapshot.speaking[seated[i]!.id]) : false}
+          />
         ))}
       </ol>
 
@@ -142,7 +154,15 @@ export function MafiaLobby({
   );
 }
 
-function SeatSlot({ member, you }: { member: MafiaMemberDTO | undefined; you: string }) {
+function SeatSlot({
+  member,
+  you,
+  speaking,
+}: {
+  member: MafiaMemberDTO | undefined;
+  you: string;
+  speaking: boolean;
+}) {
   if (!member) {
     return (
       <li className="flex h-24 items-center justify-center rounded-card border border-dashed border-border text-sm text-muted">
@@ -156,6 +176,7 @@ function SeatSlot({ member, you }: { member: MafiaMemberDTO | undefined; you: st
         "relative flex h-24 flex-col items-center justify-center gap-1 rounded-card border bg-surface p-2 text-center shadow-soft-sm",
         member.id === you ? "border-primary" : "border-border",
         !member.connected && "opacity-50",
+        speaking && "ring-2 ring-snap",
       )}
     >
       <Avatar name={member.name} color={member.color} avatar={member.avatar} size="md" />

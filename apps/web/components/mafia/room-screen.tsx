@@ -6,6 +6,7 @@ import { IdentityDialog } from "@/components/identity-dialog";
 import { PuzzleLoader } from "@/components/puzzle-loader";
 import { loadIdentity, type Identity } from "@/lib/identity";
 import { useMafiaRoom } from "@/lib/mafia/use-mafia-room";
+import { useMafiaVoice } from "@/lib/mafia/use-mafia-voice";
 import { MafiaGameScreen } from "./game-screen";
 import { MafiaLobby } from "./lobby";
 
@@ -30,6 +31,14 @@ export function MafiaRoomScreen({ roomId }: { roomId: string }) {
 
 function ConnectedRoom({ roomId, identity }: { roomId: string; identity: Identity }) {
   const { state, connection, clockOffset, actions } = useMafiaRoom(roomId, identity);
+  // The viewer only sees "zeroNight" as their phase when they are on the black team.
+  const game = state?.game ?? null;
+  const voice = useMafiaVoice(
+    roomId,
+    identity,
+    game?.phase === "zeroNight",
+    `${state?.status}|${game?.phase}|${game?.day}|${game?.night}`,
+  );
 
   if (connection === "not_found" || connection === "banned" || connection === "kicked") {
     const text = {
@@ -67,9 +76,9 @@ function ConnectedRoom({ roomId, identity }: { roomId: string; identity: Identit
         </div>
       )}
       {state.status === "lobby" || !state.game ? (
-        <MafiaLobby state={state} actions={actions} />
+        <MafiaLobby state={state} actions={actions} voice={voice} />
       ) : (
-        <MafiaGameScreen state={state} clockOffset={clockOffset} actions={actions} />
+        <MafiaGameScreen state={state} clockOffset={clockOffset} actions={actions} voice={voice} />
       )}
     </>
   );

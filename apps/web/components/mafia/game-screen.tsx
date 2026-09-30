@@ -13,8 +13,10 @@ import { useState } from "react";
 import { Avatar } from "@/components/game/ui";
 import { errorText, eventText, phaseTitle, RESULT_TEXT, ROLE_TEXT } from "@/lib/mafia/text";
 import type { MafiaActions } from "@/lib/mafia/use-mafia-room";
+import type { MafiaVoiceHandle } from "@/lib/mafia/use-mafia-voice";
 import { cn } from "@/lib/utils";
 import { useCountdown } from "./use-countdown";
+import { VoiceControls } from "./voice-controls";
 
 type PickAction = Extract<MafiaAction, "nominate" | "vote" | "shoot" | "check" | "bestMove">;
 
@@ -58,10 +60,12 @@ export function MafiaGameScreen({
   state,
   clockOffset,
   actions,
+  voice,
 }: {
   state: MafiaRoomStateDTO;
   clockOffset: number;
   actions: MafiaActions;
+  voice: MafiaVoiceHandle;
 }) {
   const view = state.game!;
   const members = new Map(state.members.map((m) => [m.id, m]));
@@ -123,7 +127,7 @@ export function MafiaGameScreen({
         night ? "bg-[#0e0b1a] text-white" : "bg-background text-foreground",
       )}
     >
-      <PhaseBar view={view} seconds={seconds} night={night} me={me} />
+      <PhaseBar view={view} seconds={seconds} night={night} me={me} voice={voice} />
 
       <main className="mx-auto w-full max-w-4xl px-3 pt-3 pb-40 sm:px-4">
         {view.phase === "roleReveal" && me?.role && <RoleCard seat={me} view={view} />}
@@ -160,6 +164,7 @@ export function MafiaGameScreen({
                 night={night}
                 selectable={action !== null && canPick(view, action, seat)}
                 selected={picked.includes(seat.seat)}
+                talking={Boolean(voice.snapshot.speaking[seat.playerId])}
                 onSelect={() => toggle(seat)}
               />
             ))}
@@ -191,11 +196,13 @@ function PhaseBar({
   seconds,
   night,
   me,
+  voice,
 }: {
   view: MafiaView;
   seconds: number | null;
   night: boolean;
   me: MafiaSeatView | null;
+  voice: MafiaVoiceHandle;
 }) {
   const [showRole, setShowRole] = useState(false);
   return (
@@ -214,6 +221,7 @@ function PhaseBar({
             </p>
           )}
         </div>
+        <VoiceControls handle={voice} dark={night} />
         {seconds !== null && (
           <span
             className={cn(
@@ -318,6 +326,7 @@ function SeatCard({
   night,
   selectable,
   selected,
+  talking,
   onSelect,
 }: {
   seat: MafiaSeatView;
@@ -326,6 +335,7 @@ function SeatCard({
   night: boolean;
   selectable: boolean;
   selected: boolean;
+  talking: boolean;
   onSelect: () => void;
 }) {
   const speaking = view.speaker === seat.seat;
@@ -368,6 +378,7 @@ function SeatCard({
           night ? "border-white/10 bg-white/5" : "border-border bg-surface shadow-soft-sm",
           mine && (night ? "border-white/40" : "border-primary"),
           speaking && "ring-2 ring-snap ring-offset-2 ring-offset-transparent",
+          talking && "shadow-[0_0_0_4px_rgb(0_194_168/0.35)]",
           selectable && "cursor-pointer hover:-translate-y-0.5",
           selected && "ring-4 ring-primary",
           !seat.alive && "opacity-45 grayscale",
@@ -482,6 +493,9 @@ function ActionPanel({
     note = "Sizning so'zingiz. Gapirib bo'lgach «Pas» ni bosing.";
   else if (canPass && view.phase === "lastWords") note = "Oxirgi so'zingiz.";
   else if (canPass) note = "Sizning navbatingiz.";
+  else if (view.phase === "zeroNight")
+    note =
+      "Tanishuv tuni: jamoangiz bilan tungi kanalda gaplashib, otish tartibini kelishib oling.";
   else if (view.phase === "dawn" && view.log.length > 0)
     note = eventText(view.log[view.log.length - 1]!);
 

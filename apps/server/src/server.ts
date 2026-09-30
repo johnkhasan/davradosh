@@ -9,6 +9,7 @@ import { MafiaRoomManager } from "./mafia/mafia-manager";
 import type { MafiaRoomOptions } from "./mafia/mafia-room";
 import { MemoryMafiaRepository, type MafiaRepository } from "./mafia/repository";
 import { mafiaRoutes } from "./mafia/routes";
+import { MafiaVoiceSync } from "./mafia/voice-sync";
 import {
   createMafiaEmitter,
   registerMafiaHandlers,
@@ -116,7 +117,9 @@ export async function createGameServer({
 
   // Mafia: its own Socket.IO namespace, so puzzle traffic and events stay untouched.
   const mafiaNsp = io.of("/mafia") as unknown as MafiaNamespace;
+  const mafiaVoice = voice ? new MafiaVoiceSync(voice, app.log) : null;
   const mafia = new MafiaRoomManager({
+    voice: mafiaVoice,
     repository: mafiaRepository,
     createEmitter: () => createMafiaEmitter(mafiaNsp),
     logger: app.log,
@@ -124,7 +127,7 @@ export async function createGameServer({
     room: mafiaOptions?.room,
     tickMs: mafiaOptions?.tickMs,
   });
-  await app.register(mafiaRoutes, { manager: mafia });
+  await app.register(mafiaRoutes, { manager: mafia, voice: mafiaVoice });
   registerMafiaHandlers(mafiaNsp, mafia, app.log);
 
   return {

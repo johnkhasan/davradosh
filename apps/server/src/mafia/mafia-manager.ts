@@ -3,6 +3,7 @@ import { publicPlayerId, randomId } from "../lib/ids";
 import type { MafiaGameOptions } from "./game";
 import { MafiaRoom, type MafiaRoomEmitter, type MafiaRoomOptions } from "./mafia-room";
 import type { MafiaRepository } from "./repository";
+import type { MafiaVoiceSync } from "./voice-sync";
 
 /** Mafia rooms are short-lived: one evening of games. */
 export const MAFIA_ROOM_TTL_MS = 24 * 60 * 60_000;
@@ -14,6 +15,8 @@ export interface MafiaManagerOptions {
   /** Shorter phase lengths in tests. */
   game?: MafiaGameOptions;
   room?: Omit<MafiaRoomOptions, "game" | "now">;
+  /** Applies the voice policy to LiveKit; absent when voice is not configured. */
+  voice?: MafiaVoiceSync | null;
   now?: () => number;
   /** How often phase timers are checked. */
   tickMs?: number;
@@ -127,8 +130,10 @@ export class MafiaRoomManager {
       } catch (error) {
         this.opts.logger.error({ err: error, roomId: room.id }, "mafia room tick failed");
       }
+      this.opts.voice?.sync(room);
       if (room.connectedCount === 0 && now - room.lastActiveAt > this.idleUnloadMs) {
         this.rooms.delete(room.id);
+        this.opts.voice?.forget(room.id);
         void this.save(room);
         this.opts.logger.info({ roomId: room.id }, "mafia room unloaded");
       }
