@@ -13,12 +13,15 @@ export function useMafiaVoice(
   identity: Identity,
   nightMember: boolean,
   phaseKey: string,
+  /** Only once the person has joined the room: the server gives voice tokens to members only. */
+  joined: boolean,
 ) {
   const [voice] = useState(() => new MafiaVoice(roomId, identity.clientId));
   useEffect(() => {
+    if (!joined) return;
     void voice.connect();
     return () => voice.destroy();
-  }, [voice]);
+  }, [voice, joined]);
   const snapshot = useSyncExternalStore(voice.subscribe, voice.getSnapshot, voice.getSnapshot);
   useEffect(() => {
     void voice.onPhase(nightMember);

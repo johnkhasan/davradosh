@@ -38,6 +38,7 @@ function ConnectedRoom({ roomId, identity }: { roomId: string; identity: Identit
     identity,
     game?.phase === "zeroNight",
     `${state?.status}|${game?.phase}|${game?.day}|${game?.night}`,
+    state !== null,
   );
 
   if (connection === "not_found" || connection === "banned" || connection === "kicked") {

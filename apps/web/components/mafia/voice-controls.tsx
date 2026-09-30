@@ -34,8 +34,8 @@ export function VoiceControls({
       )}
       <button
         type="button"
+        // Works while voice is still connecting: the choice is applied as soon as it is up.
         onClick={() => void voice.setMic(!snapshot.micWanted)}
-        disabled={snapshot.status !== "connected"}
         aria-pressed={snapshot.micWanted}
         aria-label={label}
         title={label}
