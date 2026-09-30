@@ -1,4 +1,6 @@
 import {
+  MAFIA_MAX_PLAYERS,
+  MAFIA_MIN_PLAYERS,
   MAFIA_PLAYERS,
   MAFIA_ROLE_DECK,
   MAFIA_TIMINGS,
@@ -62,9 +64,10 @@ export default function MafiaPage() {
           Do&apos;stlar bilan onlayn mafia
         </h1>
         <p className="mt-4 text-lg text-muted">
-          Sport mafiasining rasmiy qoidalari bo&apos;yicha, {MAFIA_PLAYERS} kishilik stolda.
-          Boshlovchi avtomatik: fazalarni, so&apos;z navbatini va ovoz berishni server o&apos;zi
-          yuritadi, siz faqat o&apos;ynaysiz.
+          Sport mafiasining rasmiy qoidalari bo&apos;yicha, {MAFIA_MIN_PLAYERS}–{MAFIA_MAX_PLAYERS}{" "}
+          kishilik stolda (rasmiy o&apos;yin {MAFIA_PLAYERS} kishi). Boshlovchi avtomatik:
+          fazalarni, so&apos;z navbatini va ovoz berishni server o&apos;zi yuritadi, siz faqat
+          o&apos;ynaysiz.
         </p>
 
         <h2 className="mt-12 font-display text-2xl font-bold">Rollar</h2>
@@ -75,7 +78,7 @@ export default function MafiaPage() {
                 <span aria-hidden>{ROLES[role].emoji}</span>
                 {ROLES[role].name}
                 <span className="ml-auto text-sm font-normal text-muted">
-                  {ROLES[role].team} · {count(role)} ta
+                  {ROLES[role].team} · {MAFIA_PLAYERS} kishida {count(role)} ta
                 </span>
               </div>
               <p className="mt-1 text-sm text-muted">{ROLES[role].text}</p>
@@ -114,8 +117,9 @@ export default function MafiaPage() {
 
         <div className="mt-12 flex flex-col items-center rounded-card border border-dashed border-border p-6 text-center">
           <p className="text-muted">
-            Stol yarating va havolani 9 ta do&apos;stingizga yuboring. Hozircha ovozsiz: gapirish
-            navbatida ovozli chat keyingi bosqichda qo&apos;shiladi.
+            {MAFIA_MIN_PLAYERS} dan {MAFIA_MAX_PLAYERS} kishigacha stol yarating va havolani
+            do&apos;stlaringizga yuboring. Ovozli chatda gaplashasiz: so&apos;z navbati kelganda
+            mikrofoningiz o&apos;zi ochiladi.
           </p>
           <div className="mt-4">
             <CreateTableButton />

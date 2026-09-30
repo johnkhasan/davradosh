@@ -16,6 +16,7 @@ function record(overrides: Partial<MafiaRoomRecord> = {}): MafiaRoomRecord {
   return {
     id: "room1234",
     hostId: pid(1),
+    tableSize: 10,
     status: "lobby",
     members: [],
     game: null,
@@ -175,5 +176,27 @@ describe("MafiaRoom: game", () => {
       before.seats.map((s) => [s.seat, s.playerId, s.role]),
     );
     expect(after.phase).toBe(before.phase);
+  });
+});
+
+describe("MafiaRoom: table sizes", () => {
+  it("seats as many as the table has, then starts with exactly that many", () => {
+    const small = new MafiaRoom(
+      record({ tableSize: 6 }),
+      { state: (socket, state) => sent.push({ socket, state }) },
+      {
+        now: () => now,
+      },
+    );
+    for (let n = 1; n <= 7; n++) join(small, n);
+    const state = last("s1");
+    expect(state.tableSize).toBe(6);
+    expect(state.members.filter((m) => !m.spectator)).toHaveLength(6);
+    expect(state.members.find((m) => m.id === pid(7))!.spectator).toBe(true);
+    for (let n = 2; n <= 6; n++) small.setReady(pid(n), true);
+    expect(small.start(pid(1))).toEqual({ ok: true });
+    const view = last("s1").game!;
+    expect(view.seats).toHaveLength(6);
+    expect(small.summary).toMatchObject({ tableSize: 6, players: 6, spectators: 1 });
   });
 });

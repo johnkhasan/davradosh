@@ -4,25 +4,45 @@
  * See mafia-plan.md for the online adaptations.
  */
 
-/** 1.1: exactly ten players. */
+/** 1.1: the official table has exactly ten players. */
 export const MAFIA_PLAYERS = 10;
+
+/**
+ * Tables of other sizes are an (unofficial) club variant with the same rules: only the cast
+ * changes. Below six the black team would be one player; above twelve a day gets very long.
+ */
+export const MAFIA_MIN_PLAYERS = 6;
+export const MAFIA_MAX_PLAYERS = 12;
 
 export type MafiaRole = "civilian" | "sheriff" | "mafia" | "don";
 export type MafiaTeam = "red" | "black";
 
-/** 1.1: 7 red cards (one of them the Sheriff) and 3 black cards (one of them the Don). */
-export const MAFIA_ROLE_DECK: readonly MafiaRole[] = [
-  "civilian",
-  "civilian",
-  "civilian",
-  "civilian",
-  "civilian",
-  "civilian",
-  "sheriff",
-  "mafia",
-  "mafia",
-  "don",
-];
+/** Size of the black team (the Don included): about a third of the table, 3 of 10 officially. */
+export function blackTeamSize(players: number): number {
+  return players <= 8 ? 2 : players <= 11 ? 3 : 4;
+}
+
+/**
+ * The cards for a table: one Don and the rest of the black team, one Sheriff, civilians.
+ * For ten players this is the official deck (1.1): 7 red with the Sheriff, 3 black with the Don.
+ */
+export function mafiaRoleDeck(players: number): MafiaRole[] {
+  if (!Number.isInteger(players) || players < MAFIA_MIN_PLAYERS || players > MAFIA_MAX_PLAYERS) {
+    throw new Error(
+      `mafia tables have ${MAFIA_MIN_PLAYERS}–${MAFIA_MAX_PLAYERS} players, not ${players}`,
+    );
+  }
+  const black = blackTeamSize(players);
+  return [
+    ...Array<MafiaRole>(players - black - 1).fill("civilian"),
+    "sheriff",
+    ...Array<MafiaRole>(black - 1).fill("mafia"),
+    "don",
+  ];
+}
+
+/** 1.1: the official deck. */
+export const MAFIA_ROLE_DECK: readonly MafiaRole[] = mafiaRoleDeck(MAFIA_PLAYERS);
 
 export function teamOf(role: MafiaRole): MafiaTeam {
   return role === "mafia" || role === "don" ? "black" : "red";

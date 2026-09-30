@@ -11,7 +11,14 @@ import {
 import { Eye, EyeOff, Mic } from "lucide-react";
 import { useState } from "react";
 import { Avatar } from "@/components/game/ui";
-import { errorText, eventText, phaseTitle, RESULT_TEXT, ROLE_TEXT } from "@/lib/mafia/text";
+import {
+  errorText,
+  eventText,
+  phaseTitle,
+  RESULT_TEXT,
+  ROLE_TEXT,
+  seatColumns,
+} from "@/lib/mafia/text";
 import type { MafiaActions } from "@/lib/mafia/use-mafia-room";
 import type { MafiaVoiceHandle } from "@/lib/mafia/use-mafia-voice";
 import { cn } from "@/lib/utils";
@@ -158,7 +165,7 @@ export function MafiaGameScreen({
         {view.phase === "night" ? (
           <SleepingCity view={view} />
         ) : (
-          <ol className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
+          <ol className={cn("mt-3 grid grid-cols-2 gap-2", seatColumns(view.seats.length))}>
             {view.seats.map((seat) => (
               <SeatCard
                 key={seat.seat}

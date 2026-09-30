@@ -38,7 +38,7 @@ export async function mafiaRoutes(
     async (request, reply) => {
       const parsed = CreateMafiaRoomSchema.safeParse(request.body);
       if (!parsed.success) return reply.code(400).send({ error: "invalid" });
-      const id = await opts.manager.create(parsed.data.clientId);
+      const id = await opts.manager.create(parsed.data.clientId, parsed.data.tableSize);
       return reply.code(201).send({ id });
     },
   );

@@ -1,11 +1,11 @@
 "use client";
 
-import { MAFIA_PLAYERS, type MafiaMemberDTO, type MafiaRoomStateDTO } from "@puzzle/shared/mafia";
+import type { MafiaMemberDTO, MafiaRoomStateDTO } from "@puzzle/shared/mafia";
 import { Check, Copy, Crown, Send } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { Avatar } from "@/components/game/ui";
-import { errorText } from "@/lib/mafia/text";
+import { castText, errorText, seatColumns } from "@/lib/mafia/text";
 import type { MafiaActions } from "@/lib/mafia/use-mafia-room";
 import type { MafiaVoiceHandle } from "@/lib/mafia/use-mafia-voice";
 import { cn } from "@/lib/utils";
@@ -27,7 +27,7 @@ export function MafiaLobby({
   const seated = state.members.filter((m) => !m.spectator);
   const spectators = state.members.filter((m) => m.spectator);
   const notReady = seated.filter((m) => !m.isHost && (!m.ready || !m.connected)).length;
-  const missing = MAFIA_PLAYERS - seated.length;
+  const missing = state.tableSize - seated.length;
   const canStart = me?.isHost && missing === 0 && notReady === 0;
   const link = typeof window === "undefined" ? "" : window.location.href;
 
@@ -55,7 +55,7 @@ export function MafiaLobby({
         </Link>
         <div className="flex items-center gap-3">
           <span className="text-sm text-muted tabular-nums">
-            {seated.length}/{MAFIA_PLAYERS} o&apos;yinchi
+            {seated.length}/{state.tableSize} o&apos;yinchi
           </span>
           <VoiceControls handle={voice} />
         </div>
@@ -63,7 +63,8 @@ export function MafiaLobby({
 
       <h1 className="mt-8 font-display text-3xl font-bold">Stol yig&apos;ilmoqda</h1>
       <p className="mt-2 text-muted">
-        O&apos;yin uchun aniq {MAFIA_PLAYERS} kishi kerak. Havolani do&apos;stlaringizga yuboring.
+        {state.tableSize} kishilik stol: {castText(state.tableSize)}. Havolani do&apos;stlaringizga
+        yuboring.
       </p>
 
       <div className="mt-5 flex flex-col gap-2 sm:flex-row">
@@ -89,8 +90,8 @@ export function MafiaLobby({
         </a>
       </div>
 
-      <ol className="mt-8 grid grid-cols-2 gap-2 sm:grid-cols-5">
-        {Array.from({ length: MAFIA_PLAYERS }, (_, i) => (
+      <ol className={cn("mt-8 grid grid-cols-2 gap-2", seatColumns(state.tableSize))}>
+        {Array.from({ length: state.tableSize }, (_, i) => (
           <SeatSlot
             key={i}
             member={seated[i]}

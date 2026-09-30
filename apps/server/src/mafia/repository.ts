@@ -17,6 +17,8 @@ export interface MafiaMemberRecord {
 export interface MafiaRoomRecord {
   id: string;
   hostId: string;
+  /** Players at the table, chosen at creation (6–12, 10 is official). */
+  tableSize: number;
   status: MafiaRoomStatus;
   members: MafiaMemberRecord[];
   /** Contains the roles: server only. */
@@ -26,13 +28,15 @@ export interface MafiaRoomRecord {
   expiresAt: Date;
 }
 
+export type NewMafiaRoom = { id: string; hostId: string; tableSize: number; expiresAt: Date };
+
 export type MafiaRoomUpdate = Pick<
   MafiaRoomRecord,
   "hostId" | "status" | "members" | "game" | "banned"
 >;
 
 export interface MafiaRepository {
-  createRoom(room: { id: string; hostId: string; expiresAt: Date }): Promise<MafiaRoomRecord>;
+  createRoom(room: NewMafiaRoom): Promise<MafiaRoomRecord>;
   loadRoom(id: string): Promise<MafiaRoomRecord | null>;
   saveRoom(id: string, update: MafiaRoomUpdate): Promise<void>;
   deleteExpiredRooms(now: Date): Promise<number>;
@@ -42,7 +46,7 @@ export interface MafiaRepository {
 export class MemoryMafiaRepository implements MafiaRepository {
   private readonly rooms = new Map<string, MafiaRoomRecord>();
 
-  async createRoom(room: { id: string; hostId: string; expiresAt: Date }) {
+  async createRoom(room: NewMafiaRoom) {
     const record: MafiaRoomRecord = {
       ...room,
       status: "lobby",
@@ -82,7 +86,7 @@ const STATUS_TO_DB = { lobby: "LOBBY", playing: "PLAYING" } as const;
 export class PrismaMafiaRepository implements MafiaRepository {
   constructor(private readonly db: Db) {}
 
-  async createRoom(room: { id: string; hostId: string; expiresAt: Date }) {
+  async createRoom(room: NewMafiaRoom) {
     const row = await this.db.mafiaRoom.create({ data: room });
     return this.toRecord(row);
   }
@@ -114,6 +118,7 @@ export class PrismaMafiaRepository implements MafiaRepository {
   private toRecord(row: {
     id: string;
     hostId: string;
+    tableSize: number;
     status: "LOBBY" | "PLAYING";
     members: unknown;
     game: unknown;
@@ -124,6 +129,7 @@ export class PrismaMafiaRepository implements MafiaRepository {
     return {
       id: row.id,
       hostId: row.hostId,
+      tableSize: row.tableSize,
       status: row.status === "PLAYING" ? "playing" : "lobby",
       members: (row.members as MafiaMemberRecord[] | null) ?? [],
       game: (row.game as MafiaGameSnapshot | null) ?? null,

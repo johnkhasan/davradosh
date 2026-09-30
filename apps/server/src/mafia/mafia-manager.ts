@@ -1,3 +1,4 @@
+import { MAFIA_PLAYERS } from "@puzzle/shared/mafia";
 import type { FastifyBaseLogger } from "fastify";
 import { publicPlayerId, randomId } from "../lib/ids";
 import type { MafiaGameOptions } from "./game";
@@ -59,10 +60,11 @@ export class MafiaRoomManager {
     await this.saveDirty();
   }
 
-  async create(clientId: string): Promise<string> {
+  async create(clientId: string, tableSize: number = MAFIA_PLAYERS): Promise<string> {
     const room = await this.opts.repository.createRoom({
       id: randomId(8),
       hostId: publicPlayerId(clientId),
+      tableSize,
       expiresAt: new Date(this.now() + MAFIA_ROOM_TTL_MS),
     });
     return room.id;
@@ -90,6 +92,7 @@ export class MafiaRoomManager {
     return {
       id: record.id,
       status: record.status,
+      tableSize: record.tableSize,
       players,
       spectators: record.members.length - players,
     };

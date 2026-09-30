@@ -1,3 +1,4 @@
+import { blackTeamSize } from "@puzzle/shared/mafia";
 import type {
   MafiaActionError,
   MafiaEvent,
@@ -134,4 +135,15 @@ const ERROR_TEXT: Record<MafiaActionError | MafiaRoomError, string> = {
 
 export function errorText(error: string): string {
   return ERROR_TEXT[error as keyof typeof ERROR_TEXT] ?? "Xatolik yuz berdi";
+}
+
+/** "3 qora (Don bilan) · 1 Sherif · 6 tinch aholi" for a table of `players`. */
+export function castText(players: number): string {
+  const black = blackTeamSize(players);
+  return `${black} qora (Don bilan) · 1 Sherif · ${players - black - 1} tinch aholi`;
+}
+
+/** Seat grid columns on wider screens: rows of about five. */
+export function seatColumns(players: number): string {
+  return players <= 8 ? "sm:grid-cols-4" : players <= 10 ? "sm:grid-cols-5" : "sm:grid-cols-6";
 }

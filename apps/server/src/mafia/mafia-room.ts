@@ -1,5 +1,4 @@
 import {
-  MAFIA_PLAYERS,
   teamOf,
   type MafiaActionResult,
   type MafiaJoinPayload,
@@ -45,6 +44,7 @@ export type MafiaJoinResult =
  */
 export class MafiaRoom {
   readonly id: string;
+  readonly tableSize: number;
   private hostId: string;
   private status: MafiaRoomStatus;
   private readonly members = new Map<string, Member>();
@@ -68,6 +68,7 @@ export class MafiaRoom {
     this.lobbyGraceMs = options.lobbyGraceMs ?? MAFIA_LOBBY_GRACE_MS;
     const now = this.now();
     this.id = record.id;
+    this.tableSize = record.tableSize;
     this.hostId = record.hostId;
     this.status = record.status;
     this.banned = new Set(record.banned);
@@ -126,7 +127,7 @@ export class MafiaRoom {
         avatar: payload.avatar,
         ready: false,
         // Late comers watch: during a game, or when all ten seats are taken.
-        spectator: this.status === "playing" || this.seated().length >= MAFIA_PLAYERS,
+        spectator: this.status === "playing" || this.seated().length >= this.tableSize,
         joinedAt: now,
         socketId: null,
         connected: false,
@@ -178,13 +179,13 @@ export class MafiaRoom {
     return { ok: true };
   }
 
-  /** Host only, with exactly ten connected players who are all ready (the host counts as ready). */
+  /** Host only, with a full table of connected players who are all ready (the host counts as ready). */
   start(playerId: string): MafiaRoomResult {
     if (playerId !== this.hostId) return { ok: false, error: "not_host" };
     if (this.status !== "lobby") return { ok: false, error: "wrong_status" };
     const seated = this.seated();
     const ready = seated.every((m) => m.connected && (m.ready || m.id === this.hostId));
-    if (seated.length !== MAFIA_PLAYERS || !ready) return { ok: false, error: "not_ready" };
+    if (seated.length !== this.tableSize || !ready) return { ok: false, error: "not_ready" };
     this.game = new MafiaGame(
       seated.map((m) => ({ id: m.id, name: m.name })),
       this.now(),
@@ -217,7 +218,7 @@ export class MafiaRoom {
       .filter((m) => m.spectator)
       .sort((a, b) => Number(b.connected) - Number(a.connected) || a.joinedAt - b.joinedAt);
     for (const member of waiting) {
-      if (this.seated().length >= MAFIA_PLAYERS) break;
+      if (this.seated().length >= this.tableSize) break;
       member.spectator = false;
       member.ready = false;
     }
@@ -320,6 +321,7 @@ export class MafiaRoom {
     return {
       id: this.id,
       status: this.status,
+      tableSize: this.tableSize,
       members: members.map((m): MafiaMemberDTO => ({
         id: m.id,
         name: m.name,
@@ -373,6 +375,7 @@ export class MafiaRoom {
     return {
       id: this.id,
       status: this.status,
+      tableSize: this.tableSize,
       players: this.seated().length,
       spectators: this.members.size - this.seated().length,
     };

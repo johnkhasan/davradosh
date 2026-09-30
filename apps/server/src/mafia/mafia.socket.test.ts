@@ -170,7 +170,13 @@ describe("mafia over Socket.IO", () => {
 
     // The public room info carries no secrets.
     const info = await (await fetch(`${url}/api/mafia/rooms/${roomId}`)).json();
-    expect(info).toEqual({ id: roomId, status: "playing", players: 10, spectators: 1 });
+    expect(info).toEqual({
+      id: roomId,
+      status: "playing",
+      tableSize: 10,
+      players: 10,
+      spectators: 1,
+    });
     expect(JSON.stringify(info)).not.toMatch(/role|sheriff|mafia|don/i);
   });
 

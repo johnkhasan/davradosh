@@ -70,6 +70,8 @@ model MafiaRoom {
   id        String      @id
   /// Public player id of the current host
   hostId    String
+  /// Players at the table: 6–12, 10 is the official game
+  tableSize Int         @default(10)
   status    MafiaStatus @default(LOBBY)
   /// Room members (players and spectators) without socket data
   members   Json        @default("[]")

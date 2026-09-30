@@ -16,6 +16,7 @@ function contract(name: string, make: () => MafiaRepository, prefix: string) {
     const created = await repo.createRoom({
       id,
       hostId: "host",
+      tableSize: 10,
       expiresAt: new Date(Date.now() + 60_000),
     });
     expect(created).toMatchObject({ id, hostId: "host", status: "lobby", members: [], game: null });
@@ -60,10 +61,16 @@ function contract(name: string, make: () => MafiaRepository, prefix: string) {
 
   it(`${name}: deletes expired rooms`, async () => {
     const repo = make();
-    await repo.createRoom({ id: `${prefix}old`, hostId: "h", expiresAt: new Date(Date.now() - 1) });
+    await repo.createRoom({
+      id: `${prefix}old`,
+      hostId: "h",
+      tableSize: 10,
+      expiresAt: new Date(Date.now() - 1),
+    });
     await repo.createRoom({
       id: `${prefix}new`,
       hostId: "h",
+      tableSize: 10,
       expiresAt: new Date(Date.now() + 60_000),
     });
     expect(await repo.deleteExpiredRooms(new Date())).toBeGreaterThanOrEqual(1);

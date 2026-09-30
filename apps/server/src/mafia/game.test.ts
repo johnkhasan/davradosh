@@ -8,10 +8,9 @@ import {
 import { describe, expect, it } from "vitest";
 import { MafiaGame } from "./game";
 
-const players = Array.from({ length: 10 }, (_, i) => ({
-  id: `p${i + 1}`,
-  name: `Player ${i + 1}`,
-}));
+const makePlayers = (n: number) =>
+  Array.from({ length: n }, (_, i) => ({ id: `p${i + 1}`, name: `Player ${i + 1}` }));
+const players = makePlayers(10);
 
 /**
  * `random(max) = max - 1` makes Fisher–Yates a no-op, so seat N is player pN and the deck is
@@ -103,9 +102,32 @@ describe("MafiaGame: setup (1.1)", () => {
     }
   });
 
-  it("needs exactly ten distinct players", () => {
-    expect(() => new MafiaGame(players.slice(0, 9), 0)).toThrow();
+  it("needs 6 to 12 distinct players", () => {
+    expect(() => new MafiaGame(makePlayers(5), 0)).toThrow();
+    expect(() => new MafiaGame(makePlayers(13), 0)).toThrow();
     expect(() => new MafiaGame([...players.slice(0, 9), players[0]!], 0)).toThrow();
+    for (let n = 6; n <= 12; n++) expect(() => new MafiaGame(makePlayers(n), 0)).not.toThrow();
+  });
+
+  it("scales the cast with the table: always one Don and one Sheriff, about a third black", () => {
+    const expected: Record<number, { black: number; civilians: number }> = {
+      6: { black: 2, civilians: 3 },
+      7: { black: 2, civilians: 4 },
+      8: { black: 2, civilians: 5 },
+      9: { black: 3, civilians: 5 },
+      10: { black: 3, civilians: 6 },
+      11: { black: 3, civilians: 7 },
+      12: { black: 4, civilians: 7 },
+    };
+    for (let n = 6; n <= 12; n++) {
+      const game = new MafiaGame(makePlayers(n), 0);
+      const roles = Array.from({ length: n }, (_, s) => game.roleAt(s + 1)!);
+      expect(roles.filter((r) => r === "don")).toHaveLength(1);
+      expect(roles.filter((r) => r === "sheriff")).toHaveLength(1);
+      expect(roles.filter((r) => teamOf(r) === "black")).toHaveLength(expected[n]!.black);
+      expect(roles.filter((r) => r === "civilian")).toHaveLength(expected[n]!.civilians);
+      expect(game.aliveSeats()).toEqual(Array.from({ length: n }, (_, i) => i + 1));
+    }
   });
 
   it("starts with the role reveal and the zero night, without a kill", () => {
@@ -609,9 +631,13 @@ function mulberry32(seed: number) {
   };
 }
 
+/** Every table size in turn: seed 1 plays seven players, seed 6 plays twelve, and so on. */
+const sizeFor = (seed: number) => 6 + (seed % 7);
+
 function simulate(seed: number, onStep?: (game: MafiaGame) => void) {
   const rand = mulberry32(seed);
   const pick = <T>(items: readonly T[]) => items[Math.floor(rand() * items.length)]!;
+  const players = makePlayers(sizeFor(seed));
   const game = new MafiaGame(players, 0, { random: (max) => Math.floor(rand() * max) });
   let now = 0;
   for (let step = 0; step < 5000 && game.phase !== "gameOver"; step++) {
@@ -695,7 +721,10 @@ describe("MafiaGame: secrecy", () => {
     for (let seed = 1; seed <= 200; seed++) {
       simulate(seed, (game) => {
         const over = game.phase === "gameOver";
-        const viewers: Array<string | null> = [null, ...players.map((p) => p.id)];
+        const viewers: Array<string | null> = [
+          null,
+          ...makePlayers(sizeFor(seed)).map((p) => p.id),
+        ];
         for (const viewer of viewers) {
           const view = game.viewFor(viewer);
           const mySeat = viewer ? game.seatOf(viewer) : null;

@@ -53,6 +53,7 @@ function setup() {
     {
       id: "room1234",
       hostId: pid(1),
+      tableSize: 10,
       status: "lobby",
       members: [],
       game: null,

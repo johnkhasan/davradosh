@@ -2,8 +2,9 @@ import { randomInt } from "node:crypto";
 import {
   BEST_MOVE_SIZE,
   MAFIA_DRAW_NIGHTS,
-  MAFIA_PLAYERS,
-  MAFIA_ROLE_DECK,
+  MAFIA_MAX_PLAYERS,
+  MAFIA_MIN_PLAYERS,
+  mafiaRoleDeck,
   MAFIA_TIMINGS,
   NIGHT_PHASES,
   teamOf,
@@ -147,15 +148,18 @@ export class MafiaGame {
       this.phaseState = { kind: "roleReveal", endsAt: now };
       return;
     }
-    if (players.length !== MAFIA_PLAYERS) {
-      throw new Error(`mafia needs exactly ${MAFIA_PLAYERS} players, got ${players.length}`);
+    // Ten is the official table; six to twelve is the club variant with the same rules.
+    if (players.length < MAFIA_MIN_PLAYERS || players.length > MAFIA_MAX_PLAYERS) {
+      throw new Error(
+        `mafia needs ${MAFIA_MIN_PLAYERS}–${MAFIA_MAX_PLAYERS} players, got ${players.length}`,
+      );
     }
     if (new Set(players.map((p) => p.id)).size !== players.length) {
       throw new Error("player ids must be unique");
     }
     // Seats and roles are dealt independently, both uniformly at random.
     const order = this.shuffle(players);
-    const deck = this.shuffle(MAFIA_ROLE_DECK);
+    const deck = this.shuffle(mafiaRoleDeck(players.length));
     this.seats = order.map((player, i) => ({
       seat: i + 1,
       playerId: player.id,
@@ -639,8 +643,9 @@ export class MafiaGame {
 
   /** The first living seat at or after `seat`, going round the table. */
   private nextAliveFrom(seat: number): number {
-    for (let i = 0; i < MAFIA_PLAYERS; i++) {
-      const candidate = ((seat - 1 + i) % MAFIA_PLAYERS) + 1;
+    const size = this.seats.length;
+    for (let i = 0; i < size; i++) {
+      const candidate = ((seat - 1 + i) % size) + 1;
       if (this.isAlive(candidate)) return candidate;
     }
     throw new Error("nobody is alive");

@@ -6,10 +6,12 @@ import {
   RoomIdSchema,
   UsernameSchema,
 } from "../protocol";
-import { BEST_MOVE_SIZE, MAFIA_PLAYERS } from "./rules";
+import { BEST_MOVE_SIZE, MAFIA_MAX_PLAYERS, MAFIA_MIN_PLAYERS, MAFIA_PLAYERS } from "./rules";
 import type { MafiaView } from "./view";
 
-export const SeatSchema = z.number().int().min(1).max(MAFIA_PLAYERS);
+export const SeatSchema = z.number().int().min(1).max(MAFIA_MAX_PLAYERS);
+
+export const TableSizeSchema = z.number().int().min(MAFIA_MIN_PLAYERS).max(MAFIA_MAX_PLAYERS);
 
 /** Payloads of player actions; the server validates every one of them. */
 export const NominatePayloadSchema = z.object({ seat: SeatSchema });
@@ -37,7 +39,11 @@ export type MafiaActionResult = { ok: true } | { ok: false; error: MafiaActionEr
 
 // ------------------------------------------------------------------ rooms
 
-export const CreateMafiaRoomSchema = z.object({ clientId: ClientIdSchema });
+export const CreateMafiaRoomSchema = z.object({
+  clientId: ClientIdSchema,
+  /** Players at the table; 10 is the official game. */
+  tableSize: TableSizeSchema.default(MAFIA_PLAYERS),
+});
 
 export const MafiaJoinPayloadSchema = z.object({
   roomId: RoomIdSchema,
@@ -69,6 +75,8 @@ export type MafiaRoomStatus = "lobby" | "playing";
 export interface MafiaRoomStateDTO {
   id: string;
   status: MafiaRoomStatus;
+  /** Players needed at this table (6–12, 10 is official). */
+  tableSize: number;
   members: MafiaMemberDTO[];
   you: string;
   /** Server clock when this state was made: clients use it to show timers without clock skew. */
