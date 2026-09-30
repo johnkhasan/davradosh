@@ -1,6 +1,11 @@
 "use client";
 
-import { MAX_PLAYERS_PER_ROOM, type PlayerDTO, type PlayerStatsDTO } from "@puzzle/shared";
+import {
+  MAX_PLAYERS_PER_ROOM,
+  PLAYER_COLORS,
+  type PlayerDTO,
+  type PlayerStatsDTO,
+} from "@puzzle/shared";
 import {
   Check,
   Eye,
@@ -548,6 +553,8 @@ function RoomScreen({
             durationMs={completed.durationMs}
             stats={completed.stats}
             players={players}
+            me={me}
+            self={identity}
             pieces={progress.total}
             onClose={() => setDismissedRound(room?.startedAt ?? null)}
             onRestart={controller.isHost ? () => void controller.restart() : undefined}
@@ -709,10 +716,19 @@ function Notice({ notice }: { notice: { id: number; text: string } | null }) {
   );
 }
 
+/** Stable small number from a string, e.g. to give a nameless player a colour of their own. */
+function hashIndex(value: string, size: number) {
+  let hash = 0;
+  for (let i = 0; i < value.length; i++) hash = (hash * 31 + value.charCodeAt(i)) | 0;
+  return Math.abs(hash) % size;
+}
+
 function CompletedDialog({
   durationMs,
   stats,
   players,
+  me,
+  self,
   pieces,
   onClose,
   onRestart,
@@ -720,6 +736,9 @@ function CompletedDialog({
   durationMs: number;
   stats: Record<string, PlayerStatsDTO>;
   players: PlayerDTO[];
+  me: string;
+  /** This browser's saved name, for our own row when the room has none. */
+  self: Identity;
   pieces: number;
   onClose: () => void;
   /** Host only: play the same picture again. */
@@ -730,20 +749,25 @@ function CompletedDialog({
     ...Object.keys(stats),
     ...players.filter((p) => p.role === "player").map((p) => p.id),
   ]);
+  // Rooms from before names were kept in the stats have nameless rows: number them instead.
+  let unnamed = 0;
   const rows = [...ids]
-    .map((id) => {
-      const live = players.find((p) => p.id === id);
-      const row = stats[id];
+    .map((id) => ({ id, row: stats[id], live: players.find((p) => p.id === id) }))
+    .sort((a, b) => (b.row?.merges ?? 0) - (a.row?.merges ?? 0))
+    .map(({ id, row, live }) => {
+      const mine = id === me;
+      const known = live ?? (row?.name ? row : mine ? self : null);
+      const fallback = PLAYER_COLORS[hashIndex(id, PLAYER_COLORS.length)]!;
       return {
         id,
-        name: live?.name ?? row?.name ?? "O'yinchi",
-        color: live?.color ?? row?.color ?? "#9ca3af",
-        avatar: live?.avatar ?? row?.avatar ?? "",
-        left: !live?.connected,
+        mine,
+        name: known?.name ?? `O'yinchi ${++unnamed}`,
+        color: known?.color ?? fallback,
+        avatar: known?.avatar ?? "",
+        left: !mine && !live?.connected,
         merges: row?.merges ?? 0,
       };
-    })
-    .sort((a, b) => b.merges - a.merges);
+    });
   const max = Math.max(1, ...rows.map((r) => r.merges));
   return (
     <div className="absolute inset-0 flex items-center justify-center bg-black/30 p-4 backdrop-blur-[2px]">
@@ -763,13 +787,14 @@ function CompletedDialog({
           {pieces} bo&apos;lak · {formatDuration(durationMs)}
         </p>
         <ul className="mt-5 space-y-2 text-left">
-          {rows.map(({ id, name, color, avatar, left, merges }, index) => (
+          {rows.map(({ id, mine, name, color, avatar, left, merges }, index) => (
             <li key={id} className="flex items-center gap-2">
               <Avatar name={name} color={color} avatar={avatar} size="sm" dimmed={left} />
               <div className="min-w-0 flex-1">
                 <div className="flex justify-between gap-2 text-sm">
                   <span className="truncate font-medium">
                     {name} {index === 0 && merges > 0 && "🏆"}
+                    {mine && <span className="ml-1 text-xs font-normal text-muted">(siz)</span>}
                     {left && (
                       <span className="ml-1 text-xs font-normal text-muted">(chiqib ketgan)</span>
                     )}
