@@ -168,6 +168,10 @@ export interface RoomInfoDTO {
 
 export interface PlayerStatsDTO {
   merges: number;
+  /** Name, colour and avatar when last seen, so results still show players who left. */
+  name?: string;
+  color?: string;
+  avatar?: string;
 }
 
 export interface ChatMessageDTO {

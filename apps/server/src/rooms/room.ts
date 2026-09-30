@@ -170,6 +170,7 @@ export class Room {
         avatar: payload.avatar,
         connected: true,
       };
+      if (existing.dto.role === "player" || this.stats[playerId]) this.trackStats(existing.dto);
       this.lastActiveAt = this.now();
       this.emit.others(socketId, "player:updated", existing.dto);
       return { ok: true, state: this.stateFor(playerId), replacedSocketId };
@@ -195,7 +196,7 @@ export class Room {
       },
     };
     this.players.set(playerId, player);
-    if (role === "player") this.stats[playerId] ??= { merges: 0 };
+    if (role === "player") this.trackStats(player.dto);
     this.lastActiveAt = this.now();
     this.emit.others(socketId, "player:joined", player.dto);
     return { ok: true, state: this.stateFor(playerId), replacedSocketId: null };
@@ -253,9 +254,18 @@ export class Room {
 
   private setRoleOf(player: PlayerRecord, role: PlayerRole) {
     if (role === "viewer") this.releaseLocksOf(player.dto.id);
-    else this.stats[player.dto.id] ??= { merges: 0 };
     player.dto = { ...player.dto, role };
+    if (role === "player") this.trackStats(player.dto);
     this.emit.all("player:updated", player.dto);
+  }
+
+  /** Starts or refreshes a player's stats row; it keeps who they are for the results after they leave. */
+  private trackStats(dto: PlayerDTO): PlayerStatsDTO {
+    const row = (this.stats[dto.id] ??= { merges: 0 });
+    row.name = dto.name;
+    row.color = dto.color;
+    row.avatar = dto.avatar;
+    return row;
   }
 
   // ---------------------------------------------------------------- host actions
@@ -328,7 +338,7 @@ export class Room {
     this.locks.clear();
     this.stats = {};
     for (const player of this.players.values()) {
-      if (player.dto.role === "player") this.stats[player.dto.id] = { merges: 0 };
+      if (player.dto.role === "player") this.trackStats(player.dto);
     }
     this.info.status = "PLAYING";
     this.info.completedAt = null;
@@ -437,7 +447,8 @@ export class Room {
     for (const absorbed of result.absorbed) this.locks.delete(absorbed);
     this.locks.delete(result.groupId);
     if (result.absorbed.length > 0) {
-      const stats = (this.stats[playerId] ??= { merges: 0 });
+      const player = this.players.get(playerId);
+      const stats = player ? this.trackStats(player.dto) : (this.stats[playerId] ??= { merges: 0 });
       stats.merges += result.absorbed.length;
     }
     this.emit.all("piece:snapped", { ...result, playerId });

@@ -201,7 +201,19 @@ describe("Room", () => {
       room.drop(pid(2), "s2", { groupId: 0, x: 5000, y: 5000 });
       const snap = spy.events("piece:snapped")[0]!;
       expect(snap.args[0]).toMatchObject({ absorbed: [0], playerId: pid(2) });
-      expect(room.stateFor(pid(2)).stats[pid(2)]).toEqual({ merges: 1 });
+      expect(room.stateFor(pid(2)).stats[pid(2)]).toMatchObject({ merges: 1 });
+    });
+
+    it("keeps the stats and identity of a player who left, for the results", () => {
+      // Dropped here, piece 1 fits piece 0.
+      room.grab(pid(2), "s2", 1);
+      room.drop(pid(2), "s2", { groupId: 1, x: 5000, y: 5000 });
+      room.disconnect(pid(2), "s2");
+      now += SEAT_RESERVATION_MS;
+      room.sweep();
+      const state = room.stateFor(pid(1));
+      expect(state.players.some((p) => p.id === pid(2))).toBe(false);
+      expect(state.stats[pid(2)]).toMatchObject({ merges: 1, name: "Player 2", avatar: "🦊" });
     });
 
     it("corrects only the sender on a stale drop", () => {
@@ -371,7 +383,7 @@ describe("Room viewers and host actions", () => {
     expect(room.puzzle.connectedPieceCount()).toBe(0);
     expect(room.puzzle.groupCount).toBe(12);
     expect(room.info).toMatchObject({ status: "PLAYING", completedAt: null, startedAt: now });
-    expect(room.stateFor(hostId).stats[pid(2)]).toEqual({ merges: 0 });
+    expect(room.stateFor(hostId).stats[pid(2)]).toMatchObject({ merges: 0 });
     expect(spy.events("puzzle:reset")).toHaveLength(1);
   });
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { MAX_PLAYERS_PER_ROOM, type PlayerDTO } from "@puzzle/shared";
+import { MAX_PLAYERS_PER_ROOM, type PlayerDTO, type PlayerStatsDTO } from "@puzzle/shared";
 import {
   Check,
   Eye,
@@ -641,16 +641,31 @@ function CompletedDialog({
   onRestart,
 }: {
   durationMs: number;
-  stats: Record<string, { merges: number }>;
+  stats: Record<string, PlayerStatsDTO>;
   players: PlayerDTO[];
   pieces: number;
   onClose: () => void;
   /** Host only: play the same picture again. */
   onRestart?: () => void;
 }) {
-  const rows = players
-    .filter((player) => player.role === "player" || stats[player.id])
-    .map((player) => ({ player, merges: stats[player.id]?.merges ?? 0 }))
+  // Everyone who played this round, including people who have left since.
+  const ids = new Set([
+    ...Object.keys(stats),
+    ...players.filter((p) => p.role === "player").map((p) => p.id),
+  ]);
+  const rows = [...ids]
+    .map((id) => {
+      const live = players.find((p) => p.id === id);
+      const row = stats[id];
+      return {
+        id,
+        name: live?.name ?? row?.name ?? "O'yinchi",
+        color: live?.color ?? row?.color ?? "#9ca3af",
+        avatar: live?.avatar ?? row?.avatar ?? "",
+        left: !live?.connected,
+        merges: row?.merges ?? 0,
+      };
+    })
     .sort((a, b) => b.merges - a.merges);
   const max = Math.max(1, ...rows.map((r) => r.merges));
   return (
@@ -671,20 +686,23 @@ function CompletedDialog({
           {pieces} bo&apos;lak · {formatDuration(durationMs)}
         </p>
         <ul className="mt-5 space-y-2 text-left">
-          {rows.map(({ player, merges }, index) => (
-            <li key={player.id} className="flex items-center gap-2">
-              <Avatar name={player.name} color={player.color} avatar={player.avatar} size="sm" />
+          {rows.map(({ id, name, color, avatar, left, merges }, index) => (
+            <li key={id} className="flex items-center gap-2">
+              <Avatar name={name} color={color} avatar={avatar} size="sm" dimmed={left} />
               <div className="min-w-0 flex-1">
-                <div className="flex justify-between text-sm">
+                <div className="flex justify-between gap-2 text-sm">
                   <span className="truncate font-medium">
-                    {player.name} {index === 0 && merges > 0 && "🏆"}
+                    {name} {index === 0 && merges > 0 && "🏆"}
+                    {left && (
+                      <span className="ml-1 text-xs font-normal text-muted">(chiqib ketgan)</span>
+                    )}
                   </span>
                   <span className="text-muted tabular-nums">{merges}</span>
                 </div>
                 <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-surface-muted">
                   <div
                     className="h-full rounded-full"
-                    style={{ width: `${(merges / max) * 100}%`, backgroundColor: player.color }}
+                    style={{ width: `${(merges / max) * 100}%`, backgroundColor: color }}
                   />
                 </div>
               </div>
