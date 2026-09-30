@@ -13,7 +13,6 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { GameCursor } from "@/components/landing/game-cursor";
 import { HeroDemo } from "@/components/landing/hero-demo";
-import { JoinByCode } from "@/components/landing/join-by-code";
 import { ServerStatus } from "@/components/server-status";
 import { SITE_URL } from "@/lib/env";
 import { FAQ, jsonLdScript, landingJsonLd, OPEN_GRAPH } from "@/lib/seo";
@@ -128,13 +127,12 @@ export default function Home() {
                 Puzzle yaratish
               </Link>
               <Link
-                href="/play"
+                href="/join"
                 className="w-full rounded-control border border-border bg-surface px-7 py-3.5 text-center text-lg font-medium shadow-soft-sm transition-colors hover:bg-surface-muted focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none sm:w-auto"
               >
-                Yolg&apos;iz sinab ko&apos;rish
+                Qo&apos;shilish
               </Link>
             </div>
-            <JoinByCode className="mt-6 items-center md:items-start" />
           </div>
 
           {/* Hovering (or focusing / tapping) the demo reveals the three steps as a popup. */}
