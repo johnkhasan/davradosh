@@ -41,6 +41,8 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
+  // Android Chrome shrinks the page above the on-screen keyboard (iOS is handled in the chat).
+  interactiveWidget: "resizes-content",
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#faf8f5" },
     { media: "(prefers-color-scheme: dark)", color: "#121019" },

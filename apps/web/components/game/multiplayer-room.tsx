@@ -31,7 +31,7 @@ import { CursorLayer } from "./cursor-layer";
 import { ChatButton, ChatPanel } from "./chat-panel";
 import { PeopleButton, PeoplePanel, ViewerBanner } from "./people-panel";
 import { Minimap } from "./minimap";
-import { ReactionBar, ReactionLayer } from "./reactions";
+import { ReactionBar, ReactionLayer, ReactionPicker } from "./reactions";
 import { AudioStartBanner, VideoBubbles, VoiceButtons, VoiceSettings } from "./voice";
 import {
   Avatar,
@@ -399,6 +399,10 @@ function RoomScreen({
         <div className="absolute bottom-3 left-1/2 hidden -translate-x-1/2 sm:block">
           <ReactionBar onReact={(emoji) => controller.react(emoji)} />
         </div>
+        {/* Phones: the bottom row is taken by the tools, so reactions open from a button above it. */}
+        <div className="absolute right-3 bottom-[4.75rem] z-20 sm:hidden">
+          <ReactionPicker onReact={(emoji) => controller.react(emoji)} />
+        </div>
 
         <div className="absolute bottom-3 left-3 hidden rounded-card border border-border bg-surface/80 p-1.5 shadow-soft-md backdrop-blur lg:block">
           {!viewing && <Minimap controller={controller} players={players} me={me} />}
@@ -422,6 +426,7 @@ function RoomScreen({
             messages={snapshot.chat}
             me={me}
             onClose={() => setChatOpen(false)}
+            onReact={(emoji) => controller.react(emoji)}
           />
         )}
 
