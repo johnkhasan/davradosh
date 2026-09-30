@@ -479,9 +479,12 @@ function RoomScreen({
           </ToolButton>
         </MobileDock>
 
-        <div className="absolute bottom-3 left-3 hidden rounded-card border border-border bg-surface/80 p-1.5 shadow-soft-md backdrop-blur lg:block">
-          {!viewing && <Minimap controller={controller} players={players} me={me} />}
-        </div>
+        {/* The frame goes too while admiring the picture, or an empty box is left in the corner. */}
+        {!viewing && (
+          <div className="absolute bottom-3 left-3 hidden rounded-card border border-border bg-surface/80 p-1.5 shadow-soft-md backdrop-blur lg:block">
+            <Minimap controller={controller} players={players} me={me} />
+          </div>
+        )}
 
         {voiceSettings && voiceSnapshot.status !== "unavailable" && (
           <VoiceSettings
