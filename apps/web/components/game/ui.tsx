@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronUp, Maximize, Minimize } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Maximize, Minimize } from "lucide-react";
 import {
   createContext,
   type ReactNode,
@@ -198,6 +198,132 @@ export function TablePicker({
                   <span className="flex-1">{label}</span>
                   {selected && <Check aria-hidden className="size-4" />}
                 </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Styled replacement for a native <select>: opens downwards, arrow keys move
+ * between options, Enter or a click picks one, Escape closes.
+ */
+export function Dropdown<T extends string | number>({
+  value,
+  options,
+  onChange,
+  label,
+  className,
+}: {
+  value: T;
+  options: readonly { value: T; label: string }[];
+  onChange: (value: T) => void;
+  /** Accessible name, e.g. "Bo'laklar soni". */
+  label: string;
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+  const listId = useId();
+  const current = options.find((o) => o.value === value);
+
+  useEffect(() => {
+    if (!open) return;
+    // Focus the selected option so arrow keys start from it.
+    listRef.current?.querySelector<HTMLElement>('[aria-selected="true"]')?.focus();
+    const onPointer = (e: PointerEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointer);
+    return () => document.removeEventListener("pointerdown", onPointer);
+  }, [open]);
+
+  const close = () => {
+    setOpen(false);
+    buttonRef.current?.focus();
+  };
+
+  const onListKey = (e: React.KeyboardEvent) => {
+    const items = [...(listRef.current?.querySelectorAll<HTMLElement>("[role=option]") ?? [])];
+    const index = items.indexOf(document.activeElement as HTMLElement);
+    const move = (to: number) => items[(to + items.length) % items.length]?.focus();
+    if (e.key === "ArrowDown") move(index + 1);
+    else if (e.key === "ArrowUp") move(index - 1);
+    else if (e.key === "Home") move(0);
+    else if (e.key === "End") move(items.length - 1);
+    else if (e.key === "Escape") close();
+    else if (e.key === "Tab") setOpen(false);
+    else return;
+    if (e.key !== "Tab") e.preventDefault();
+  };
+
+  return (
+    <div ref={rootRef} className={cn("relative", className)}>
+      <button
+        ref={buttonRef}
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={listId}
+        aria-label={`${label}: ${current?.label ?? ""}`}
+        onClick={() => setOpen((v) => !v)}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+            e.preventDefault();
+            setOpen(true);
+          }
+        }}
+        className={cn(
+          "flex h-9 items-center gap-1.5 rounded-control border border-border bg-surface pr-2 pl-3 text-sm font-medium whitespace-nowrap transition-colors hover:bg-surface-muted focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none",
+          open && "bg-surface-muted",
+        )}
+      >
+        {current?.label}
+        <ChevronDown
+          aria-hidden
+          className={cn("size-4 text-muted transition-transform", open && "rotate-180")}
+        />
+      </button>
+
+      {open && (
+        <ul
+          ref={listRef}
+          id={listId}
+          role="listbox"
+          aria-label={label}
+          onKeyDown={onListKey}
+          className="absolute top-full right-0 z-50 mt-2 min-w-full origin-top-right animate-[pop_150ms_ease-out] rounded-card border border-border bg-surface p-1.5 shadow-soft-lg"
+        >
+          {options.map((option) => {
+            const selected = option.value === value;
+            return (
+              <li
+                key={option.value}
+                role="option"
+                aria-selected={selected}
+                tabIndex={-1}
+                onClick={() => {
+                  onChange(option.value);
+                  close();
+                }}
+                onKeyDown={(e) => {
+                  if (e.key !== "Enter" && e.key !== " ") return;
+                  e.preventDefault();
+                  onChange(option.value);
+                  close();
+                }}
+                className={cn(
+                  "flex cursor-pointer items-center gap-3 rounded-control py-2 pr-3 pl-2 text-sm whitespace-nowrap transition-colors outline-none hover:bg-surface-muted focus-visible:bg-surface-muted",
+                  selected && "font-semibold text-primary",
+                )}
+              >
+                <Check aria-hidden className={cn("size-4 shrink-0", !selected && "invisible")} />
+                {option.label}
               </li>
             );
           })}

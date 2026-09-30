@@ -38,6 +38,7 @@ import { cn } from "@/lib/utils";
 import { MenuAction, MenuTables, MenuToggle, MobileDock } from "./mobile-dock";
 import { PuzzleCanvas, type PuzzleCanvasHandle, type PuzzleProgress } from "./puzzle-canvas";
 import {
+  Dropdown,
   formatDuration,
   FullscreenButton,
   ProgressBar,
@@ -209,21 +210,15 @@ export function Playground() {
         <div className="ml-auto flex flex-1 justify-end">
           <ProgressBar connected={progress.connected} total={progress.total} />
         </div>
-        <select
+        <Dropdown
+          label="Bo'laklar soni"
           value={pieces}
-          onChange={(e) => {
-            setPieces(Number(e.target.value));
+          options={PIECE_COUNT_OPTIONS.map((count) => ({ value: count, label: `${count} bo'lak` }))}
+          onChange={(count) => {
+            setPieces(count);
             restart();
           }}
-          className="rounded-control border border-border bg-surface px-2 py-1 text-sm"
-          aria-label="Bo'laklar soni"
-        >
-          {PIECE_COUNT_OPTIONS.map((count) => (
-            <option key={count} value={count}>
-              {count} bo&apos;lak
-            </option>
-          ))}
-        </select>
+        />
       </header>
 
       <div className={cn("relative flex-1", tableClass(table))}>
