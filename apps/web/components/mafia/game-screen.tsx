@@ -555,6 +555,14 @@ function GameLog({ view, night }: { view: MafiaView; night: boolean }) {
           <li key={events.length - i}>{eventText(event)}</li>
         ))}
       </ol>
+      <a
+        href="/mafia/qoidalar"
+        target="_blank"
+        rel="noopener"
+        className="mt-3 inline-block text-sm font-medium text-primary hover:underline"
+      >
+        📖 O&apos;yin qoidalari
+      </a>
       {events.length > 4 && (
         <button
           type="button"

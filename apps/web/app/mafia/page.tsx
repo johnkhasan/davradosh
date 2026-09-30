@@ -54,9 +54,17 @@ export default function MafiaPage() {
         <Link href="/mafia" className="font-display text-xl font-bold">
           🕵️ Mafia
         </Link>
-        <span className="rounded-full bg-primary-soft px-3 py-1 text-sm font-medium text-primary">
-          Ishlab chiqilmoqda
-        </span>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/mafia/qoidalar"
+            className="rounded-control border border-border bg-surface px-3 py-1.5 text-sm font-medium hover:bg-surface-muted"
+          >
+            📖 Qoidalar
+          </Link>
+          <span className="rounded-full bg-primary-soft px-3 py-1 text-sm font-medium text-primary">
+            Ishlab chiqilmoqda
+          </span>
+        </div>
       </header>
 
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 pb-16">

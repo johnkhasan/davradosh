@@ -55,6 +55,15 @@ export function MafiaLobby({
           🕵️ Mafia
         </Link>
         <div className="flex items-center gap-3">
+          {/* New tab: the rules must not take anyone away from the table. */}
+          <a
+            href="/mafia/qoidalar"
+            target="_blank"
+            rel="noopener"
+            className="text-sm font-medium text-primary hover:underline"
+          >
+            📖 Qoidalar
+          </a>
           <span className="text-sm text-muted tabular-nums">
             {seated.length}/{state.tableSize} o&apos;yinchi
           </span>
