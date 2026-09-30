@@ -136,8 +136,13 @@ describe("MafiaRoom: game", () => {
     room.disconnect(pid(4), "s4");
     now += MAFIA_RECONNECT_MS + 1;
     room.tick();
-    const seat = last("s1").game!.seats.find((s) => s.playerId === pid(4))!;
+    // Seen from outside the game: player 1 may be on player 4's black team and rightly know the role.
+    const seat = room.stateFor("outsider").game!.seats.find((s) => s.playerId === pid(4))!;
     expect(seat).toMatchObject({ alive: false, exit: "left", role: null });
+    expect(last("s1").game!.seats.find((s) => s.playerId === pid(4))).toMatchObject({
+      alive: false,
+      exit: "left",
+    });
   });
 
   it("keeps a reconnecting player in the game", () => {
