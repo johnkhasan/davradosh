@@ -15,7 +15,7 @@ import { WS_URL } from "../env";
 type MafiaSocket = Socket<MafiaServerToClientEvents, MafiaClientToServerEvents>;
 
 export type MafiaConnection =
-  "connecting" | "ready" | "reconnecting" | "not_found" | "banned" | "kicked";
+  "connecting" | "ready" | "reconnecting" | "not_found" | "banned" | "kicked" | "removed";
 
 /**
  * Connects to the "/mafia" namespace, (re)joins the room and keeps the latest state the
@@ -64,8 +64,9 @@ export function useMafiaRoom(roomId: string, identity: Identity) {
       if (!stopped) setConnection((c) => (c === "ready" ? "reconnecting" : c));
     });
     socket.on("mafia:state", accept);
-    socket.on("mafia:kicked", () => {
-      setConnection("kicked");
+    socket.on("mafia:kicked", (reason) => {
+      // Another tab of ours took over, or the host removed us (for good with a ban).
+      setConnection(reason === "other-tab" ? "kicked" : reason === "banned" ? "banned" : "removed");
       socket.disconnect();
     });
 
@@ -99,6 +100,10 @@ export function useMafiaRoom(roomId: string, identity: Identity) {
       shoot: (seat: number) => call("mafia:shoot", { seat }),
       check: (seat: number) => call("mafia:check", { seat }),
       bestMove: (seats: number[]) => call("mafia:best-move", { seats }),
+      say: (text: string) => call("mafia:say", { text }),
+      kick: (playerId: string, ban: boolean) => call("mafia:kick", { playerId, ban }),
+      transferHost: (playerId: string) => call("mafia:transfer-host", { playerId }),
+      foul: (seat: number) => call("mafia:foul", { seat }),
     };
   }, []);
 

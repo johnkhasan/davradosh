@@ -205,3 +205,44 @@ describe("MafiaRoom: table sizes", () => {
     expect(small.summary).toMatchObject({ tableSize: 6, players: 6, spectators: 1 });
   });
 });
+
+describe("MafiaRoom: host tools", () => {
+  it("kicks from the lobby, bans for good, and hands the host over", () => {
+    for (let n = 1; n <= 4; n++) join(room, n);
+    expect(room.kick(pid(2), pid(3), false)).toEqual({ ok: false, error: "not_host" });
+    expect(room.kick(pid(1), pid(1), false)).toEqual({ ok: false, error: "invalid" });
+    expect(room.kick(pid(1), pid(3), false)).toEqual({ ok: true, socketId: "s3" });
+    expect(last("s1").members.some((m) => m.id === pid(3))).toBe(false);
+    // A kick without a ban lets them back in; a ban does not.
+    expect(join(room, 3).ok).toBe(true);
+    expect(room.kick(pid(1), pid(3), true)).toMatchObject({ ok: true });
+    expect(join(room, 3)).toEqual({ ok: false, error: "banned" });
+
+    expect(room.transferHost(pid(1), pid(2))).toEqual({ ok: true });
+    expect(last("s1").members.find((m) => m.id === pid(2))!.isHost).toBe(true);
+    expect(room.kick(pid(1), pid(4), false)).toEqual({ ok: false, error: "not_host" });
+  });
+
+  it("kicking a player mid-game makes them leave the table with the role hidden", () => {
+    fullLobby();
+    room.start(pid(1));
+    expect(room.kick(pid(1), pid(5), true)).toMatchObject({ ok: true, socketId: "s5" });
+    const seat = room.stateFor("outsider").game!.seats.find((s) => s.playerId === pid(5))!;
+    expect(seat).toMatchObject({ alive: false, exit: "left", role: null });
+  });
+
+  it("lets only the host give fouls, only during a game, and closes the mic of a silenced speaker", () => {
+    fullLobby();
+    expect(room.foul(pid(1), 1)).toEqual({ ok: false, error: "wrong_status" });
+    room.start(pid(1));
+    now += 10_001 + 60_001;
+    room.tick(); // day one, seat 1 speaks
+    const second = room.stateFor(pid(1)).game!.seats.find((s) => s.seat === 2)!.playerId;
+    expect(room.foul(pid(2), 2)).toEqual({ ok: false, error: "not_host" });
+    for (let i = 0; i < 3; i++) expect(room.foul(pid(1), 2)).toEqual({ ok: true });
+    const firstSpeaker = room.stateFor(pid(1)).game!.seats.find((s) => s.seat === 1)!.playerId;
+    room.act(firstSpeaker, (game, t) => game.pass(firstSpeaker, t));
+    expect(room.stateFor(second).game).toMatchObject({ speaker: 2, speakerSilenced: true });
+    expect(room.voicePolicy().speakers).toEqual([]);
+  });
+});

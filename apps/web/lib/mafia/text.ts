@@ -114,6 +114,12 @@ export function eventText(event: MafiaEvent): string {
       return `🎯 ${seat(event.seat)}ning eng yaxshi yurishi: ${seats(event.seats)}`;
     case "left":
       return `🚪 ${seat(event.seat)} o'yindan chiqdi`;
+    case "said":
+      return `💬 ${seat(event.seat)}: ${event.text}`;
+    case "foul":
+      return `⚠️ ${seat(event.seat)}ga foll (${event.count}/4)`;
+    case "fouledOut":
+      return `🟥 ${seat(event.seat)} 4 foll bilan stoldan chiqarildi`;
     case "gameOver":
       return `🏁 ${RESULT_TEXT[event.result]}`;
   }

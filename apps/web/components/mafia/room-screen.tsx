@@ -41,11 +41,21 @@ function ConnectedRoom({ roomId, identity }: { roomId: string; identity: Identit
     state !== null,
   );
 
-  if (connection === "not_found" || connection === "banned" || connection === "kicked") {
+  if (
+    connection === "not_found" ||
+    connection === "banned" ||
+    connection === "kicked" ||
+    connection === "removed"
+  ) {
     const text = {
       not_found: ["🔍", "Stol topilmadi", "Havola noto'g'ri yoki stol muddati tugagan."],
       banned: ["🚫", "Kirish taqiqlangan", "Stol egasi sizni chiqarib yuborgan."],
       kicked: ["🪟", "Boshqa oynada ochildi", "Bu stol boshqa tab yoki qurilmada ochildi."],
+      removed: [
+        "👋",
+        "Sizni stoldan chiqarishdi",
+        "Stol egasi sizni chiqardi. Qayta kirishingiz mumkin.",
+      ],
     }[connection];
     return (
       <div className="flex min-h-dvh flex-col items-center justify-center gap-3 bg-background p-6 text-center">

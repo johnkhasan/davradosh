@@ -23,6 +23,7 @@ export function MafiaLobby({
 }) {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [managed, setManaged] = useState<MafiaMemberDTO | null>(null);
   const me = state.members.find((m) => m.id === state.you);
   const seated = state.members.filter((m) => !m.spectator);
   const spectators = state.members.filter((m) => m.spectator);
@@ -97,14 +98,41 @@ export function MafiaLobby({
             member={seated[i]}
             you={state.you}
             speaking={seated[i] ? Boolean(voice.snapshot.speaking[seated[i]!.id]) : false}
+            onManage={me?.isHost ? setManaged : undefined}
           />
         ))}
       </ol>
 
       {spectators.length > 0 && (
-        <p className="mt-4 text-sm text-muted">
-          Tomoshabinlar: {spectators.map((m) => m.name).join(", ")}
+        <p className="mt-4 flex flex-wrap items-center gap-1.5 text-sm text-muted">
+          Tomoshabinlar:
+          {spectators.map((m) =>
+            me?.isHost ? (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => setManaged(m)}
+                className="rounded-full bg-surface-muted px-2.5 py-0.5 text-foreground"
+              >
+                {m.name}
+              </button>
+            ) : (
+              <span key={m.id}>{m.name}</span>
+            ),
+          )}
         </p>
+      )}
+
+      {managed && (
+        <MemberMenu
+          member={managed}
+          onClose={() => setManaged(null)}
+          onAction={(call) => {
+            setManaged(null);
+            void run(call);
+          }}
+          actions={actions}
+        />
       )}
 
       {/* Sticky, so the main button stays in reach on a phone without scrolling past the seats. */}
@@ -155,14 +183,78 @@ export function MafiaLobby({
   );
 }
 
+/** Host menu for one member: hand the room over, remove, or remove for good. */
+function MemberMenu({
+  member,
+  onClose,
+  onAction,
+  actions,
+}: {
+  member: MafiaMemberDTO;
+  onClose: () => void;
+  onAction: (call: () => Promise<{ ok: boolean; error?: string }>) => void;
+  actions: MafiaActions;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center"
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`${member.name}: stol egasi amallari`}
+        className="mafia-enter w-full max-w-sm rounded-card bg-surface p-5 shadow-soft-lg"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-3">
+          <Avatar name={member.name} color={member.color} avatar={member.avatar} size="md" />
+          <h2 className="font-display text-xl font-bold">{member.name}</h2>
+        </div>
+        <div className="mt-4 flex flex-col gap-2">
+          {member.connected && (
+            <button
+              type="button"
+              onClick={() => onAction(() => actions.transferHost(member.id))}
+              className="flex items-center gap-2 rounded-control border border-border px-4 py-3 text-left font-medium"
+            >
+              <Crown className="size-4 text-amber-500" aria-hidden /> Stol egasi qilish
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => onAction(() => actions.kick(member.id, false))}
+            className="rounded-control border border-border px-4 py-3 text-left font-medium"
+          >
+            👋 Stoldan chiqarish
+          </button>
+          <button
+            type="button"
+            onClick={() => onAction(() => actions.kick(member.id, true))}
+            className="rounded-control bg-danger px-4 py-3 text-left font-semibold text-white"
+          >
+            🚫 Ban qilish (qayta kira olmaydi)
+          </button>
+          <button type="button" onClick={onClose} className="mt-1 px-4 py-2 text-muted">
+            Bekor qilish
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SeatSlot({
   member,
   you,
   speaking,
+  onManage,
 }: {
   member: MafiaMemberDTO | undefined;
   you: string;
   speaking: boolean;
+  /** Set for the host: tapping another member opens the host menu. */
+  onManage?: (member: MafiaMemberDTO) => void;
 }) {
   if (!member) {
     return (
@@ -171,13 +263,26 @@ function SeatSlot({
       </li>
     );
   }
+  const manage = onManage && member.id !== you ? () => onManage(member) : undefined;
   return (
     <li
+      onClick={manage}
+      onKeyDown={(e) => {
+        if (manage && (e.key === "Enter" || e.key === " ")) {
+          e.preventDefault();
+          manage();
+        }
+      }}
+      role={manage ? "button" : undefined}
+      tabIndex={manage ? 0 : undefined}
+      aria-label={manage ? `${member.name}: amallar` : undefined}
       className={cn(
         "relative flex h-24 flex-col items-center justify-center gap-1 rounded-card border bg-surface p-2 text-center shadow-soft-sm",
         member.id === you ? "border-primary" : "border-border",
         !member.connected && "opacity-50",
         speaking && "ring-2 ring-snap",
+        manage &&
+          "cursor-pointer hover:bg-surface-muted focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none",
       )}
     >
       <Avatar name={member.name} color={member.color} avatar={member.avatar} size="md" />

@@ -159,7 +159,7 @@ describe("mafia over Socket.IO", () => {
     expect(await first.socket.emitWithAck("mafia:pass")).toEqual({ ok: true });
     await second.until((s) => s.game!.speaker === 2);
     expect(second.state.game!.nominations).toEqual([{ seat: 5, by: 1 }]);
-    expect(second.state.game!.actions).toEqual(["pass", "nominate"]);
+    expect(second.state.game!.actions).toEqual(["pass", "nominate", "say"]);
 
     // Invalid payloads are rejected by the schemas.
     expect(
@@ -191,6 +191,29 @@ describe("mafia over Socket.IO", () => {
     const kicked = new Promise<string>((resolve) => first.socket.on("mafia:kicked", resolve));
     await member(roomId, 20);
     expect(await kicked).toBe("other-tab");
+  });
+
+  it("lets the host kick and ban over the socket, and tells the kicked tab", async () => {
+    const created = await fetch(`${url}/api/mafia/rooms`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ clientId: clientId(40) }),
+    });
+    const { id: roomId } = (await created.json()) as { id: string };
+    const host = await member(roomId, 40);
+    const guest = await member(roomId, 41);
+    const told = new Promise<string>((resolve) => guest.socket.on("mafia:kicked", resolve));
+    expect(await guest.socket.emitWithAck("mafia:kick", { playerId: host.id, ban: false })).toEqual(
+      {
+        ok: false,
+        error: "not_host",
+      },
+    );
+    expect(await host.socket.emitWithAck("mafia:kick", { playerId: guest.id, ban: true })).toEqual({
+      ok: true,
+    });
+    expect(await told).toBe("banned");
+    await expect(member(roomId, 41)).rejects.toThrow(/banned/);
   });
 
   it("answers unknown rooms with not_found", async () => {

@@ -78,5 +78,13 @@ export type MafiaTimings = { [K in keyof typeof MAFIA_TIMINGS]: number };
 /** 7.7: a draw once three nights in a row pass without anyone leaving the table. */
 export const MAFIA_DRAW_NIGHTS = 3;
 
+/** Longest text a player without a microphone can send in one message. */
+export const MAFIA_SAY_MAX = 200;
+
+/** 6.4: three fouls cost the player their next minute of speech (they may still nominate). */
+export const MAFIA_FOULS_SILENCE = 3;
+/** 6.5: a fourth foul removes the player at once, without last words. */
+export const MAFIA_FOULS_OUT = 4;
+
 /** 4.5.9: the best move names exactly three numbers. */
 export const BEST_MOVE_SIZE = 3;

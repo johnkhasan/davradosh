@@ -57,7 +57,7 @@ export class MafiaVoiceSync {
 
   /** Brings LiveKit in line with the room's policy, if it changed (or is due a re-check). */
   sync(room: MafiaRoom) {
-    const policy = room.voicePolicy();
+    const policy = { ...room.voicePolicy(), members: room.memberIds().sort() };
     const key = JSON.stringify(policy);
     const last = this.applied.get(room.id);
     const now = this.now();
@@ -76,9 +76,17 @@ export class MafiaVoiceSync {
     this.applied.delete(roomId);
   }
 
-  private async apply(roomId: string, policy: ReturnType<MafiaRoom["voicePolicy"]>) {
+  private async apply(
+    roomId: string,
+    policy: ReturnType<MafiaRoom["voicePolicy"]> & { members: string[] },
+  ) {
     const main = mafiaVoiceRoom(roomId);
     for (const participant of await this.voice.listParticipants(main)) {
+      // Kicked or banned: out of the voice room too, not just the table.
+      if (!policy.members.includes(participant.identity)) {
+        await this.voice.removeParticipant(main, participant.identity);
+        continue;
+      }
       const allowed = policy.everyone || policy.speakers.includes(participant.identity);
       if (participant.permission?.canPublish !== allowed) {
         await this.voice.setCanPublish(main, participant.identity, allowed);

@@ -6,7 +6,13 @@ import {
   RoomIdSchema,
   UsernameSchema,
 } from "../protocol";
-import { BEST_MOVE_SIZE, MAFIA_MAX_PLAYERS, MAFIA_MIN_PLAYERS, MAFIA_PLAYERS } from "./rules";
+import {
+  BEST_MOVE_SIZE,
+  MAFIA_MAX_PLAYERS,
+  MAFIA_MIN_PLAYERS,
+  MAFIA_PLAYERS,
+  MAFIA_SAY_MAX,
+} from "./rules";
 import type { MafiaView } from "./view";
 
 export const SeatSchema = z.number().int().min(1).max(MAFIA_MAX_PLAYERS);
@@ -25,6 +31,20 @@ export const BestMovePayloadSchema = z.object({
     .length(BEST_MOVE_SIZE)
     .refine((seats) => new Set(seats).size === seats.length, "seats must be distinct"),
 });
+
+/** Typed speech: whitespace collapsed, one line of up to MAFIA_SAY_MAX characters. */
+export const SayPayloadSchema = z.object({
+  text: z
+    .string()
+    .max(MAFIA_SAY_MAX * 4)
+    .transform((t) => t.replace(/\s+/g, " ").trim())
+    .pipe(z.string().min(1).max(MAFIA_SAY_MAX)),
+});
+export const MafiaPlayerTargetSchema = z.object({ playerId: z.string().min(1).max(64) });
+export const MafiaKickPayloadSchema = MafiaPlayerTargetSchema.extend({
+  ban: z.boolean().default(false),
+});
+export const FoulPayloadSchema = z.object({ seat: SeatSchema });
 
 export type MafiaActionError =
   | "wrong_phase"
@@ -117,10 +137,22 @@ export interface MafiaClientToServerEvents {
     payload: z.input<typeof BestMovePayloadSchema>,
     ack: Ack<MafiaActionResult>,
   ) => void;
+  "mafia:say": (payload: z.input<typeof SayPayloadSchema>, ack: Ack<MafiaActionResult>) => void;
+  /** Host only: remove someone (and keep them out with `ban`). */
+  "mafia:kick": (
+    payload: z.input<typeof MafiaKickPayloadSchema>,
+    ack: Ack<MafiaRoomResult>,
+  ) => void;
+  "mafia:transfer-host": (
+    payload: z.input<typeof MafiaPlayerTargetSchema>,
+    ack: Ack<MafiaRoomResult>,
+  ) => void;
+  /** Host only, during a game (6.3). */
+  "mafia:foul": (payload: z.input<typeof FoulPayloadSchema>, ack: Ack<MafiaRoomResult>) => void;
 }
 
 export interface MafiaServerToClientEvents {
   /** Full state for this viewer, sent after every change that concerns them. */
   "mafia:state": (state: MafiaRoomStateDTO) => void;
-  "mafia:kicked": (reason: "other-tab") => void;
+  "mafia:kicked": (reason: "other-tab" | "host" | "banned") => void;
 }

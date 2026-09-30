@@ -27,7 +27,8 @@ export const NIGHT_PHASES: readonly MafiaPhaseKind[] = [
 export type MafiaResult = "red" | "black" | "draw";
 
 /** Why a player left the table. Roles are never part of it (4.4.13). */
-export type MafiaExit = "voted" | "killed" | "left";
+/** Why a player left the table. Roles are never part of it (4.4.13). "fouled": a fourth foul (6.5). */
+export type MafiaExit = "voted" | "killed" | "left" | "fouled";
 
 export interface MafiaSeatView {
   seat: number;
@@ -35,6 +36,8 @@ export interface MafiaSeatView {
   name: string;
   alive: boolean;
   exit: MafiaExit | null;
+  /** Fouls given by the host (6.3–6.5). */
+  fouls: number;
   /** Only filled in for the viewer's own seat, for black teammates of a black viewer, and for everyone at game over. */
   role: MafiaRole | null;
 }
@@ -60,9 +63,25 @@ export type MafiaEvent =
   | { type: "miss" }
   | { type: "bestMove"; seat: number; seats: number[] }
   | { type: "left"; seat: number }
+  /** Typed speech of a player without a microphone, only during their own minute. */
+  | { type: "said"; seat: number; text: string }
+  | { type: "foul"; seat: number; count: number }
+  | { type: "fouledOut"; seat: number }
   | { type: "gameOver"; result: MafiaResult };
 
-export type MafiaAction = "pass" | "nominate" | "vote" | "liftAll" | "shoot" | "check" | "bestMove";
+export type MafiaAction =
+  "pass" | "nominate" | "vote" | "liftAll" | "shoot" | "check" | "bestMove" | "say";
+
+/** One night of the game, revealed to everyone at game over. */
+export interface MafiaNightRecord {
+  night: number;
+  /** Each living black player's shot (null: did not shoot). */
+  shots: Array<{ seat: number; target: number | null }>;
+  killed: number | null;
+  don: MafiaCheckView | null;
+  sheriff: MafiaCheckView | null;
+  bestMove: number[] | null;
+}
 
 /**
  * Everything one person may know about the game, computed per viewer by the server.
@@ -92,4 +111,10 @@ export interface MafiaView {
   bestMove: { seat: number; seats: number[] } | null;
   log: MafiaEvent[];
   result: MafiaResult | null;
+  /** The current speaker lost this minute to three fouls (6.4): no microphone, nominating only. */
+  speakerSilenced: boolean;
+  /** Zero-night text chat of the black team; empty for everyone else. */
+  teamChat: Array<{ seat: number; text: string }>;
+  /** Every night's shots and checks, only once the game is over. */
+  history: MafiaNightRecord[] | null;
 }

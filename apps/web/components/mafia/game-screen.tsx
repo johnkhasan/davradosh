@@ -9,7 +9,7 @@ import {
   type MafiaView,
 } from "@puzzle/shared/mafia";
 import { Eye, EyeOff, Mic } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Avatar } from "@/components/game/ui";
 import {
   errorText,
@@ -23,6 +23,7 @@ import type { MafiaActions } from "@/lib/mafia/use-mafia-room";
 import type { MafiaVoiceHandle } from "@/lib/mafia/use-mafia-voice";
 import { cn } from "@/lib/utils";
 import { useCountdown } from "./use-countdown";
+import { currentSaying, GameHistory, HostTools, SayBox, TeamChat } from "./game-extras";
 import { VoiceControls } from "./voice-controls";
 
 type PickAction = Extract<MafiaAction, "nominate" | "vote" | "shoot" | "check" | "bestMove">;
@@ -37,6 +38,7 @@ const NIGHT: ReadonlyArray<MafiaView["phase"]> = [
 ];
 
 const EXIT_TEXT = {
+  fouled: "4 foll bilan chiqdi",
   voted: "ovoz bilan chiqdi",
   killed: "o'ldirildi",
   left: "chiqib ketdi",
@@ -136,7 +138,18 @@ export function MafiaGameScreen({
         night ? "bg-[#0e0b1a] text-white" : "bg-background text-foreground",
       )}
     >
-      <PhaseBar view={view} seconds={seconds} night={night} me={me} voice={voice} />
+      <PhaseBar
+        view={view}
+        seconds={seconds}
+        night={night}
+        me={me}
+        voice={voice}
+        hostTools={
+          isHost && view.phase !== "gameOver" ? (
+            <HostTools view={view} actions={actions} dark={night} />
+          ) : null
+        }
+      />
 
       <main className="mx-auto w-full max-w-4xl px-3 pt-3 pb-40 sm:px-4">
         {view.phase === "roleReveal" && me?.role && <RoleCard seat={me} view={view} />}
@@ -161,6 +174,9 @@ export function MafiaGameScreen({
             )}
           </section>
         )}
+
+        {view.phase === "gameOver" && <GameHistory view={view} />}
+        {view.phase === "zeroNight" && <TeamChat view={view} actions={actions} />}
 
         {view.phase === "night" ? (
           <SleepingCity view={view} />
@@ -195,6 +211,7 @@ export function MafiaGameScreen({
         onConfirm={confirm}
         onPass={() => void run(actions.pass)}
         onLiftAll={(agree) => void run(() => actions.liftAll(agree))}
+        onSay={actions.say}
       />
     </div>
   );
@@ -208,12 +225,14 @@ function PhaseBar({
   night,
   me,
   voice,
+  hostTools,
 }: {
   view: MafiaView;
   seconds: number | null;
   night: boolean;
   me: MafiaSeatView | null;
   voice: MafiaVoiceHandle;
+  hostTools: ReactNode;
 }) {
   const [showRole, setShowRole] = useState(false);
   return (
@@ -232,6 +251,7 @@ function PhaseBar({
             </p>
           )}
         </div>
+        {hostTools}
         <VoiceControls handle={voice} dark={night} />
         {seconds !== null && (
           <span
@@ -362,6 +382,7 @@ function SeatCard({
   const mine = seat.seat === view.me;
   const over = view.phase === "gameOver";
   const tied = view.phase === "tieSpeech" && view.ballot.includes(seat.seat);
+  const saying = currentSaying(view, seat.seat);
   const checkText =
     check?.result === "red"
       ? "✅ qizil"
@@ -412,6 +433,19 @@ function SeatCard({
         </span>
         {speaking && (
           <Mic className="absolute top-2 right-2 size-4 text-snap" aria-label="Gapiryapti" />
+        )}
+        {seat.fouls > 0 && seat.alive && (
+          <span
+            className="absolute right-2 bottom-1.5 text-[11px] font-semibold text-amber-600 tabular-nums"
+            aria-label={`${seat.fouls} foll`}
+          >
+            ⚠️{seat.fouls}
+          </span>
+        )}
+        {saying && (
+          <span className="mafia-enter absolute inset-x-1 -top-3 z-10 line-clamp-2 rounded-control bg-foreground px-2 py-1 text-xs text-background shadow-soft-md">
+            💬 {saying}
+          </span>
         )}
         {member ? (
           <Avatar name={member.name} color={member.color} avatar={member.avatar} size="md" />
@@ -560,6 +594,7 @@ function ActionPanel({
   onConfirm,
   onPass,
   onLiftAll,
+  onSay,
 }: {
   view: MafiaView;
   me: MafiaSeatView | null;
@@ -570,6 +605,7 @@ function ActionPanel({
   onConfirm: () => void;
   onPass: () => void;
   onLiftAll: (agree: boolean) => void;
+  onSay?: (text: string) => Promise<{ ok: boolean; error?: string }>;
 }) {
   const canPass = view.actions.includes("pass");
   const canLift = view.actions.includes("liftAll");
@@ -582,6 +618,8 @@ function ActionPanel({
   else if (view.phase === "voting" && view.myVote !== null)
     note = `Ovozingiz qabul qilindi: ${view.myVote}-raqam.`;
   else if (view.phase === "liftAllVote" && view.myVote !== null) note = "Ovozingiz qabul qilindi.";
+  else if (canPass && view.phase === "speech" && view.speakerSilenced)
+    note = "3 foll: bu daqiqada gapira olmaysiz, faqat nomzod ko'rsatishingiz mumkin.";
   else if (canPass && view.phase === "speech")
     note = "Sizning so'zingiz. Gapirib bo'lgach «Pas» ni bosing.";
   else if (canPass && view.phase === "lastWords") note = "Oxirgi so'zingiz.";
@@ -592,7 +630,8 @@ function ActionPanel({
   else if (view.phase === "dawn" && view.log.length > 0)
     note = eventText(view.log[view.log.length - 1]!);
 
-  if (!action && !canPass && !canLift && !note && !error) return null;
+  const canSay = view.actions.includes("say") && view.phase !== "zeroNight";
+  if (!action && !canPass && !canLift && !canSay && !note && !error) return null;
 
   return (
     <div
@@ -608,6 +647,9 @@ function ActionPanel({
           <p role="alert" className="text-sm text-danger">
             {error}
           </p>
+        )}
+        {view.actions.includes("say") && view.phase !== "zeroNight" && onSay && (
+          <SayBox dark={night} placeholder="Mikrofon yo'qmi? Shu yerga yozing…" onSay={onSay} />
         )}
         <div className="flex gap-2">
           {action && (

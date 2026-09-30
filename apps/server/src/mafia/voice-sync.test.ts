@@ -174,6 +174,17 @@ describe("MafiaVoiceSync", () => {
     expect(fake.rooms.has(mafiaNightRoom("room1234"))).toBe(false);
   });
 
+  it("removes people who are no longer in the room from the voice room", async () => {
+    const { room, sync, fake, flush } = setup();
+    fake.join(mafiaVoiceRoom("room1234"), pid(1), true);
+    fake.join(mafiaVoiceRoom("room1234"), pid(5), true);
+    room.kick(pid(1), pid(5), true);
+    sync.sync(room);
+    await flush();
+    expect(fake.calls).toContain(`remove ${mafiaVoiceRoom("room1234")} ${pid(5)}`);
+    expect(fake.rooms.get(mafiaVoiceRoom("room1234"))!.has(pid(1))).toBe(true);
+  });
+
   it("does not repeat an unchanged policy within the re-check window", async () => {
     const { room, sync, fake, flush } = setup();
     fake.join(mafiaVoiceRoom("room1234"), pid(1), false);

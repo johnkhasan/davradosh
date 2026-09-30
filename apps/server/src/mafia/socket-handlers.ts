@@ -1,6 +1,10 @@
 import {
   BestMovePayloadSchema,
   CheckPayloadSchema,
+  FoulPayloadSchema,
+  MafiaKickPayloadSchema,
+  MafiaPlayerTargetSchema,
+  SayPayloadSchema,
   LiftAllPayloadSchema,
   MafiaJoinPayloadSchema,
   MafiaReadyPayloadSchema,
@@ -156,6 +160,55 @@ export function registerMafiaHandlers(
       "mafia:best-move",
       action(BestMovePayloadSchema, (game, id, data) => game.bestMove(id, data.seats)),
     );
+
+    // Typed speech gets its own budget: a burst of 5, then one message a second.
+    const talk = new TokenBucket(5, 1);
+    socket.on("mafia:say", async (payload, ack) => {
+      if (typeof ack !== "function") return;
+      if (!talk.take()) return ack({ ok: false, error: "not_allowed" });
+      const data = parse(SayPayloadSchema, payload);
+      const ctx = data && (await current());
+      if (!ctx) return ack(invalidAction);
+      ack(ctx.room.act(ctx.playerId, (game) => game.say(ctx.playerId, data.text)));
+    });
+
+    // ------------------------------------------------------------ host tools
+
+    socket.on("mafia:kick", async (payload, ack) => {
+      if (typeof ack !== "function") return;
+      const data = parse(MafiaKickPayloadSchema, payload);
+      const ctx = data && (await current());
+      if (!ctx) return ack({ ok: false, error: "invalid" });
+      const result = ctx.room.kick(ctx.playerId, data.playerId, data.ban);
+      if (!result.ok) return ack(result);
+      if (result.socketId) {
+        const target = nsp.sockets.get(result.socketId);
+        target?.emit("mafia:kicked", data.ban ? "banned" : "host");
+        target?.disconnect(true);
+      }
+      logger.info(
+        { roomId: ctx.room.id, target: data.playerId, ban: data.ban },
+        "mafia member kicked",
+      );
+      void manager.save(ctx.room);
+      ack({ ok: true });
+    });
+
+    socket.on("mafia:transfer-host", async (payload, ack) => {
+      if (typeof ack !== "function") return;
+      const data = parse(MafiaPlayerTargetSchema, payload);
+      const ctx = data && (await current());
+      ack(
+        ctx ? ctx.room.transferHost(ctx.playerId, data.playerId) : { ok: false, error: "invalid" },
+      );
+    });
+
+    socket.on("mafia:foul", async (payload, ack) => {
+      if (typeof ack !== "function") return;
+      const data = parse(FoulPayloadSchema, payload);
+      const ctx = data && (await current());
+      ack(ctx ? ctx.room.foul(ctx.playerId, data.seat) : { ok: false, error: "invalid" });
+    });
 
     socket.on("disconnect", async () => {
       const ctx = await current();

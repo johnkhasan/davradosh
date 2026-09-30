@@ -3,6 +3,7 @@ import {
   type MafiaActionResult,
   type MafiaJoinPayload,
   type MafiaMemberDTO,
+  type MafiaRoomError,
   type MafiaRoomResult,
   type MafiaRoomStateDTO,
   type MafiaRoomStatus,
@@ -197,6 +198,60 @@ export class MafiaRoom {
     return { ok: true };
   }
 
+  // ---------------------------------------------------------------- host tools
+
+  /**
+   * Host only: removes someone from the room; `ban` keeps them out for good. A player in a
+   * running game leaves the table (role hidden, like walking away). Returns their socket so
+   * the caller can disconnect it.
+   */
+  kick(
+    hostId: string,
+    targetId: string,
+    ban: boolean,
+  ): { ok: true; socketId: string | null } | { ok: false; error: MafiaRoomError } {
+    if (hostId !== this.hostId) return { ok: false, error: "not_host" };
+    const target = this.members.get(targetId);
+    if (!target || targetId === hostId) return { ok: false, error: "invalid" };
+    const now = this.now();
+    if (this.game?.seatOf(targetId) != null && this.game.isAlive(this.game.seatOf(targetId)!)) {
+      this.game.removePlayer(targetId, now);
+    }
+    if (ban) this.banned.add(targetId);
+    this.members.delete(targetId);
+    this.fillSeats();
+    this.touch(now);
+    this.broadcast();
+    return { ok: true, socketId: target.socketId };
+  }
+
+  /** Host only: hands the room to another connected member. */
+  transferHost(hostId: string, targetId: string): MafiaRoomResult {
+    if (hostId !== this.hostId) return { ok: false, error: "not_host" };
+    const target = this.members.get(targetId);
+    if (!target?.connected || targetId === hostId) return { ok: false, error: "invalid" };
+    this.hostId = targetId;
+    this.touch();
+    this.broadcast();
+    return { ok: true };
+  }
+
+  /** Host only, during a game: a foul for a seat (6.3). */
+  foul(hostId: string, seat: number): MafiaRoomResult {
+    if (hostId !== this.hostId) return { ok: false, error: "not_host" };
+    if (this.status !== "playing" || !this.game) return { ok: false, error: "wrong_status" };
+    const result = this.game.foul(seat, this.now());
+    if (!result.ok) return { ok: false, error: "invalid" };
+    this.touch();
+    this.broadcast();
+    return { ok: true };
+  }
+
+  /** Everyone who belongs to the room right now (connected or not). */
+  memberIds(): string[] {
+    return [...this.members.keys()];
+  }
+
   /** After a finished game: back to the lobby with the same people. */
   rematch(playerId: string): MafiaRoomResult {
     if (playerId !== this.hostId) return { ok: false, error: "not_host" };
@@ -359,7 +414,9 @@ export class MafiaRoom {
             .filter((seat) => teamOf(game.roleAt(seat)!) === "black")
             .map((seat) => game.playerAt(seat)!)
         : [];
-    return { everyone: false, speakers: speaker === null ? [] : [game.playerAt(speaker)!], night };
+    // A speech lost to three fouls (6.4) keeps the microphone closed.
+    const speakers = speaker === null || game.speakerSilenced ? [] : [game.playerAt(speaker)!];
+    return { everyone: false, speakers, night };
   }
 
   /** Voice is only for people currently connected to the room. */

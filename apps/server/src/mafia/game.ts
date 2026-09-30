@@ -2,6 +2,8 @@ import { randomInt } from "node:crypto";
 import {
   BEST_MOVE_SIZE,
   MAFIA_DRAW_NIGHTS,
+  MAFIA_FOULS_OUT,
+  MAFIA_FOULS_SILENCE,
   MAFIA_MAX_PLAYERS,
   MAFIA_MIN_PLAYERS,
   mafiaRoleDeck,
@@ -13,6 +15,7 @@ import {
   type MafiaCheckView,
   type MafiaEvent,
   type MafiaExit,
+  type MafiaNightRecord,
   type MafiaPhaseKind,
   type MafiaResult,
   type MafiaRole,
@@ -63,6 +66,10 @@ export interface MafiaGameSnapshot {
   nightsUnchanged: number;
   events: MafiaEvent[];
   result: MafiaResult | null;
+  silenceNext?: number[];
+  teamChat?: Array<{ seat: number; text: string }>;
+  history?: MafiaNightRecord[];
+  lastShooters?: number[];
 }
 
 interface SeatState {
@@ -73,6 +80,7 @@ interface SeatState {
   alive: boolean;
   exit: MafiaExit | null;
   connected: boolean;
+  fouls: number;
 }
 
 /** Where the game goes once the last words are over (unless it has been decided by then). */
@@ -81,7 +89,7 @@ type AfterWords = "night" | "day";
 type Phase =
   | { kind: "roleReveal"; endsAt: number }
   | { kind: "zeroNight"; endsAt: number }
-  | { kind: "speech"; endsAt: number; speaker: number; queue: number[] }
+  | { kind: "speech"; endsAt: number; speaker: number; queue: number[]; silenced?: boolean }
   | { kind: "voting"; endsAt: number; candidates: number[]; round: number }
   | {
       kind: "tieSpeech";
@@ -99,6 +107,9 @@ type Phase =
   | { kind: "bestMove"; endsAt: number }
   | { kind: "dawn"; endsAt: number }
   | { kind: "gameOver"; endsAt: number };
+
+/** A speech lost to three fouls still leaves time to nominate (6.4). */
+const SILENCED_TURN_MS = 15_000;
 
 /** Set only while MafiaGame.restore runs its constructor. */
 let restoring: MafiaGameSnapshot | null = null;
@@ -134,6 +145,12 @@ export class MafiaGame {
   private bestMovePick: number[] | null = null;
   private announcedBestMove: { seat: number; seats: number[] } | null = null;
   private nightsUnchanged = 0;
+  /** 6.4: seats whose next speech is lost to three fouls. */
+  private readonly silenceNext = new Set<number>();
+  private readonly teamChat: Array<{ seat: number; text: string }> = [];
+  private readonly history: MafiaNightRecord[] = [];
+  /** Black players alive when tonight's shots were counted. */
+  private lastShooters: number[] = [];
 
   private readonly events: MafiaEvent[] = [];
   private finalResult: MafiaResult | null = null;
@@ -143,7 +160,7 @@ export class MafiaGame {
     this.random = options.random ?? ((max) => randomInt(max));
     if (restoring) {
       // See MafiaGame.restore: the seats come from the snapshot, nothing is dealt.
-      this.seats = restoring.seats.map((seat) => ({ ...seat }));
+      this.seats = restoring.seats.map((seat) => ({ ...seat, fouls: seat.fouls ?? 0 }));
       this.indexSeats();
       this.phaseState = { kind: "roleReveal", endsAt: now };
       return;
@@ -168,6 +185,7 @@ export class MafiaGame {
       alive: true,
       exit: null,
       connected: true,
+      fouls: 0,
     }));
     this.indexSeats();
     this.phaseState = { kind: "roleReveal", endsAt: now + this.timings.roleReveal };
@@ -208,6 +226,10 @@ export class MafiaGame {
       nightsUnchanged: this.nightsUnchanged,
       events: this.events,
       result: this.finalResult,
+      silenceNext: [...this.silenceNext],
+      teamChat: this.teamChat,
+      history: this.history,
+      lastShooters: this.lastShooters,
     });
   }
 
@@ -253,6 +275,10 @@ export class MafiaGame {
     game.nightsUnchanged = data.nightsUnchanged;
     game.events.push(...data.events);
     game.finalResult = data.result;
+    for (const seat of data.silenceNext ?? []) game.silenceNext.add(seat);
+    game.teamChat.push(...(data.teamChat ?? []));
+    game.history.push(...(data.history ?? []));
+    game.lastShooters = data.lastShooters ?? [];
     return game;
   }
 
@@ -311,6 +337,11 @@ export class MafiaGame {
       : null;
   }
 
+  /** The current speaker lost this minute to three fouls (6.4): no voice, nominating only. */
+  get speakerSilenced(): boolean {
+    return this.phaseState.kind === "speech" && this.phaseState.silenced === true;
+  }
+
   // ---------------------------------------------------------------- time
 
   /** Runs every transition that is due at `now`. */
@@ -335,17 +366,46 @@ export class MafiaGame {
     if (!seat) return { ok: false, error: "not_a_player" };
     if (!seat.alive) return { ok: false, error: "dead" };
     if (this.phaseState.kind === "gameOver") return { ok: false, error: "wrong_phase" };
+    this.leaveTable(seat, "left", now);
+    return { ok: true };
+  }
 
+  /**
+   * 6.3–6.5: the host gives a foul. Three fouls cost the next minute of speech; the fourth
+   * removes the player at once, without last words, like leaving the table.
+   */
+  foul(seatNumber: number, now: number): MafiaActionResult {
+    const seat = this.bySeat.get(seatNumber);
+    if (!seat) return { ok: false, error: "invalid_target" };
+    if (!seat.alive) return { ok: false, error: "dead" };
+    if (this.phaseState.kind === "gameOver" || this.phaseState.kind === "roleReveal") {
+      return { ok: false, error: "wrong_phase" };
+    }
+    seat.fouls++;
+    this.events.push({ type: "foul", seat: seat.seat, count: seat.fouls });
+    if (seat.fouls >= MAFIA_FOULS_OUT) {
+      this.silenceNext.delete(seat.seat);
+      this.leaveTable(seat, "fouled", now);
+    } else if (seat.fouls === MAFIA_FOULS_SILENCE) {
+      this.silenceNext.add(seat.seat);
+    }
+    return { ok: true };
+  }
+
+  /** Someone leaves the table outside a vote or a shot: role hidden, 7.1 for the vote. */
+  private leaveTable(seat: SeatState, exit: "left" | "fouled", now: number) {
     seat.alive = false;
-    seat.exit = "left";
+    seat.exit = exit;
     this.nightsUnchanged = 0;
-    this.events.push({ type: "left", seat: seat.seat });
+    this.events.push(
+      exit === "left" ? { type: "left", seat: seat.seat } : { type: "fouledOut", seat: seat.seat },
+    );
     this.nominations = this.nominations.filter((n) => n.seat !== seat.seat);
 
     const result = this.winner();
     if (result) {
       this.finish(result, now);
-      return { ok: true };
+      return;
     }
 
     const phase = this.phaseState;
@@ -372,7 +432,6 @@ export class MafiaGame {
         if (this.bestMoveSeat === seat.seat) this.bestMoveSeat = null;
         break;
     }
-    return { ok: true };
   }
 
   // ---------------------------------------------------------------- actions
@@ -447,7 +506,36 @@ export class MafiaGame {
     return check;
   }
 
+  /**
+   * Typed speech for players without a microphone: public, during one's own minute (not a
+   * minute lost to fouls). At the zero night the black team uses it as a private chat.
+   */
+  say(playerId: string, text: string): MafiaActionResult {
+    const check = this.canSay(playerId);
+    if (!check.ok) return check;
+    const seat = this.byPlayer.get(playerId)!.seat;
+    if (this.phaseState.kind === "zeroNight") {
+      if (this.teamChat.length < 100) this.teamChat.push({ seat, text });
+    } else {
+      this.events.push({ type: "said", seat, text });
+    }
+    return check;
+  }
+
   // ---------------------------------------------------------------- validation
+
+  private canSay(playerId: string): MafiaActionResult {
+    const seat = this.byPlayer.get(playerId);
+    if (!seat) return { ok: false, error: "not_a_player" };
+    if (this.phaseState.kind === "zeroNight") {
+      if (!seat.alive) return { ok: false, error: "dead" };
+      return teamOf(seat.role) === "black" ? { ok: true } : { ok: false, error: "not_allowed" };
+    }
+    const pass = this.canPass(playerId);
+    if (!pass.ok) return pass;
+    if (this.speakerSilenced) return { ok: false, error: "not_allowed" };
+    return { ok: true };
+  }
 
   private player(playerId: string): SeatState | MafiaActionResult {
     const seat = this.byPlayer.get(playerId);
@@ -654,8 +742,24 @@ export class MafiaGame {
   private startSpeech(queue: number[], t: number) {
     const [speaker, ...rest] = queue;
     const seat = this.bySeat.get(speaker!)!;
-    const length = seat.connected ? this.timings.speech : this.timings.absentSpeaker;
-    this.phaseState = { kind: "speech", speaker: speaker!, queue: rest, endsAt: t + length };
+    let length = seat.connected ? this.timings.speech : this.timings.absentSpeaker;
+    let silenced = false;
+    if (this.silenceNext.delete(seat.seat)) {
+      // 7.6: with three or four players left, three fouls give 30 seconds instead of silence.
+      if (this.aliveSeats().length <= 4) length = Math.min(length, this.timings.tieSpeech);
+      else {
+        silenced = true;
+        // 6.4: no speech, but the player may still nominate: a short turn for that.
+        length = Math.min(length, SILENCED_TURN_MS);
+      }
+    }
+    this.phaseState = {
+      kind: "speech",
+      speaker: speaker!,
+      queue: rest,
+      endsAt: t + length,
+      silenced,
+    };
   }
 
   private endDiscussion(t: number) {
@@ -779,6 +883,7 @@ export class MafiaGame {
   /** 4.5.4 / 4.5.5: a kill only when every living black player shot the same living seat. */
   private resolveShots() {
     const shooters = this.seats.filter((s) => s.alive && teamOf(s.role) === "black");
+    this.lastShooters = shooters.map((s) => s.seat);
     const targets = shooters.map((s) => this.shots.get(s.seat));
     const first = targets[0];
     const agreed =
@@ -806,6 +911,15 @@ export class MafiaGame {
       this.announcedBestMove = { seat: this.bestMoveSeat, seats: this.bestMovePick };
       this.events.push({ type: "bestMove", seat: this.bestMoveSeat, seats: this.bestMovePick });
     }
+    // Kept secret until the game is over, then shown to everyone.
+    this.history.push({
+      night: this.night,
+      shots: this.lastShooters.map((seat) => ({ seat, target: this.shots.get(seat) ?? null })),
+      killed: this.killedTonight,
+      don: this.donChecks.find((c) => c.night === this.night) ?? null,
+      sheriff: this.sheriffChecks.find((c) => c.night === this.night) ?? null,
+      bestMove: this.bestMoveSeat !== null ? this.bestMovePick : null,
+    });
     this.phaseState = { kind: "dawn", endsAt: t + this.timings.dawn };
   }
 
@@ -878,6 +992,7 @@ export class MafiaGame {
         name: seat.name,
         alive: seat.alive,
         exit: seat.exit,
+        fouls: seat.fouls,
         role: seesRole(seat) ? seat.role : null,
       })),
       me: me?.seat ?? null,
@@ -892,6 +1007,13 @@ export class MafiaGame {
         : null,
       log: this.events.map((e) => structuredClone(e)),
       result: this.finalResult,
+      speakerSilenced: this.speakerSilenced,
+      // The black team's zero-night chat stays theirs (dead teammates included, like the roles).
+      teamChat:
+        me !== null && teamOf(me.role) === "black" && (me.alive || over)
+          ? this.teamChat.map((m) => ({ ...m }))
+          : [],
+      history: over ? structuredClone(this.history) : null,
     };
   }
 
@@ -929,6 +1051,7 @@ export class MafiaGame {
     if (this.canShoot(playerId).ok) actions.push("shoot");
     if (this.canCheck(playerId).ok) actions.push("check");
     if (this.canBestMove(playerId).ok) actions.push("bestMove");
+    if (this.canSay(playerId).ok) actions.push("say");
     return actions;
   }
 

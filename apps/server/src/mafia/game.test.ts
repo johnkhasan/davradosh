@@ -677,9 +677,13 @@ function simulate(seed: number, onStep?: (game: MafiaGame) => void) {
           case "pass":
             if (rand() < 0.5) game.pass(player.id, now);
             break;
+          case "say":
+            if (rand() < 0.2) game.say(player.id, "gap");
+            break;
         }
       }
     }
+    if (rand() < 0.02 && game.aliveSeats().length > 0) game.foul(pick(game.aliveSeats()), now);
     if (rand() < 0.01) {
       const alive = game.aliveSeats();
       if (alive.length > 0) game.removePlayer(game.playerAt(pick(alive))!, now);
@@ -750,6 +754,8 @@ describe("MafiaGame: secrecy", () => {
             // Only the actors of a night step learn that it is running.
             expect(mySeat).not.toBeNull();
           }
+          if (!over) expect(view.history, `seed ${seed}: history before the end`).toBeNull();
+          if (!seesBlack && !over) expect(view.teamChat).toEqual([]);
           // The public log carries no roles and no night choices.
           const serialized = JSON.stringify(view.log);
           expect(serialized).not.toMatch(/"role"|sheriff|civilian|"mafia"|"don"|shot/i);
@@ -782,5 +788,130 @@ describe("MafiaGame: persistence", () => {
     restored.shoot(id(restored, 10), 2);
     until(restored, "dawn");
     expect(events(restored, "killed").at(-1)).toEqual({ type: "killed", seat: 2 });
+  });
+});
+
+describe("MafiaGame: typed speech", () => {
+  it("lets the speaker type during their own minute, publicly", () => {
+    const game = fixedGame();
+    until(game, "speech");
+    expect(game.say(id(game, 2), "salom")).toEqual({ ok: false, error: "not_your_turn" });
+    expect(game.say(id(game, 1), "Men tinch aholiman")).toEqual({ ok: true });
+    expect(events(game, "said")).toEqual([{ type: "said", seat: 1, text: "Men tinch aholiman" }]);
+    expect(game.viewFor(id(game, 1)).actions).toContain("say");
+    expect(game.viewFor(id(game, 2)).actions).not.toContain("say");
+  });
+
+  it("gives the black team a private chat at the zero night", () => {
+    const game = fixedGame();
+    until(game, "zeroNight");
+    expect(game.say(id(game, 1), "hello")).toEqual({ ok: false, error: "not_allowed" });
+    expect(game.say(id(game, DON), "8 keyin 9")).toEqual({ ok: true });
+    expect(events(game, "said")).toEqual([]);
+    for (const seat of BLACK) {
+      expect(game.viewFor(id(game, seat)).teamChat).toEqual([{ seat: DON, text: "8 keyin 9" }]);
+    }
+    for (const seat of [1, SHERIFF]) expect(game.viewFor(id(game, seat)).teamChat).toEqual([]);
+    expect(game.viewFor(null).teamChat).toEqual([]);
+  });
+});
+
+describe("MafiaGame: fouls (6.3–6.5, 7.6)", () => {
+  it("silences the next speech after three fouls, but the player may still nominate", () => {
+    const game = fixedGame();
+    until(game, "speech");
+    for (let i = 0; i < 3; i++) expect(game.foul(3, 0)).toEqual({ ok: true });
+    expect(events(game, "foul").map((e) => e.count)).toEqual([1, 2, 3]);
+    game.pass(id(game, 1), 1);
+    expect(game.speaker).toBe(2);
+    game.pass(id(game, 2), 2);
+    expect(game.speaker).toBe(3);
+    expect(game.speakerSilenced).toBe(true);
+    expect(game.endsAt).toBe(2 + 15_000);
+    expect(game.say(id(game, 3), "gap")).toEqual({ ok: false, error: "not_allowed" });
+    expect(game.nominate(id(game, 3), 5)).toEqual({ ok: true });
+    expect(game.viewFor(null).speakerSilenced).toBe(true);
+    // Only that one minute: the next day seat 3 speaks normally.
+    game.pass(id(game, 3), 3);
+    expect(game.speakerSilenced).toBe(false);
+    expect(game.viewFor(null).seats.find((s) => s.seat === 3)!.fouls).toBe(3);
+  });
+
+  it("removes a player at the fourth foul, without last words, and cancels that day's vote", () => {
+    const game = fixedGame();
+    until(game, "speech");
+    game.nominate(id(game, 1), 5);
+    game.pass(id(game, 1), 1);
+    game.nominate(id(game, 2), 6);
+    for (let i = 0; i < 4; i++) game.foul(4, 2);
+    expect(game.viewFor(null).seats.find((s) => s.seat === 4)).toMatchObject({
+      alive: false,
+      exit: "fouled",
+      role: null,
+      fouls: 4,
+    });
+    expect(events(game, "fouledOut")).toEqual([{ type: "fouledOut", seat: 4 }]);
+    expect(game.foul(4, 3)).toEqual({ ok: false, error: "dead" });
+    until(game, "shoot");
+    expect(events(game, "noVote")).toEqual([{ type: "noVote", reason: "playerLeft" }]);
+    expect(events(game, "lastWords" as never)).toEqual([]);
+  });
+
+  it("gives 30 seconds instead of silence with three or four players left (7.6)", () => {
+    const game = fixedGame();
+    speeches(game);
+    night(game, 4);
+    voteOutToday(game, 9);
+    night(game, 5);
+    voteOutToday(game, DON);
+    night(game, 6);
+    voteOutToday(game, SHERIFF);
+    night(game, null);
+    until(game, "speech");
+    expect(game.aliveSeats()).toEqual([1, 2, 3, 8]);
+    const later = game.aliveSeats().find((s) => s !== game.speaker)!;
+    for (let i = 0; i < 3; i++) game.foul(later, 0);
+    while (game.speaker !== later) game.pass(id(game, game.speaker!), game.endsAt - 1);
+    expect(game.speakerSilenced).toBe(false);
+    const start = game.endsAt - MAFIA_TIMINGS.tieSpeech;
+    expect(game.endsAt - start).toBe(MAFIA_TIMINGS.tieSpeech);
+  });
+});
+
+describe("MafiaGame: history", () => {
+  it("reveals every night's shots and checks at game over, and not before", () => {
+    const game = fixedGame();
+    speeches(game);
+    until(game, "shoot");
+    game.shoot(id(game, 8), 2);
+    game.shoot(id(game, 9), 2);
+    game.shoot(id(game, 10), 3);
+    until(game, "donCheck");
+    game.check(id(game, DON), SHERIFF);
+    until(game, "sheriffCheck");
+    game.check(id(game, SHERIFF), 8);
+    until(game, "dawn");
+    expect(game.viewFor(id(game, DON)).history).toBeNull();
+    // Finish the game: vote out the black team.
+    voteOutToday(game, 8);
+    night(game, null);
+    voteOutToday(game, 9);
+    night(game, null);
+    voteOutToday(game, 10);
+    expect(game.result).toBe("red");
+    const history = game.viewFor(null).history!;
+    expect(history[0]).toEqual({
+      night: 2,
+      shots: [
+        { seat: 8, target: 2 },
+        { seat: 9, target: 2 },
+        { seat: 10, target: 3 },
+      ],
+      killed: null,
+      don: { night: 2, seat: SHERIFF, result: "sheriff" },
+      sheriff: { night: 2, seat: 8, result: "black" },
+      bestMove: null,
+    });
+    expect(history.map((h) => h.night)).toEqual([2, 3, 4]);
   });
 });
