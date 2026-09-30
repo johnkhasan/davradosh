@@ -71,6 +71,8 @@ export interface MafiaRoomStateDTO {
   status: MafiaRoomStatus;
   members: MafiaMemberDTO[];
   you: string;
+  /** Server clock when this state was made: clients use it to show timers without clock skew. */
+  serverNow: number;
   /** Present while playing; computed for the viewer only. */
   game: MafiaView | null;
 }

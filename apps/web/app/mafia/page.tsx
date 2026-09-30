@@ -6,6 +6,7 @@ import {
 } from "@puzzle/shared/mafia";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { CreateTableButton } from "@/components/mafia/create-table-button";
 
 // Work in progress: reachable only by typing /mafia. Not linked, not in the sitemap, not indexed.
 export const metadata: Metadata = {
@@ -111,9 +112,15 @@ export default function MafiaPage() {
           </li>
         </ol>
 
-        <p className="mt-12 rounded-card border border-dashed border-border p-5 text-center text-muted">
-          O&apos;yin xonalari tez orada ochiladi. Hozircha o&apos;yin mantiqi tayyorlanyapti.
-        </p>
+        <div className="mt-12 flex flex-col items-center rounded-card border border-dashed border-border p-6 text-center">
+          <p className="text-muted">
+            Stol yarating va havolani 9 ta do&apos;stingizga yuboring. Hozircha ovozsiz: gapirish
+            navbatida ovozli chat keyingi bosqichda qo&apos;shiladi.
+          </p>
+          <div className="mt-4">
+            <CreateTableButton />
+          </div>
+        </div>
       </main>
     </div>
   );

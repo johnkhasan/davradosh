@@ -330,6 +330,7 @@ export class MafiaRoom {
         spectator: m.spectator,
       })),
       you: playerId,
+      serverNow: this.now(),
       game: this.game ? this.game.viewFor(playerId) : null,
     };
   }
