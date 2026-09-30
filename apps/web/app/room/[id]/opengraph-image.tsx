@@ -1,6 +1,6 @@
 import { ImageResponse } from "next/og";
 import type { RoomPreview } from "@/lib/api";
-import { API_URL } from "@/lib/env";
+import { API_URL, SITE_URL } from "@/lib/env";
 
 export const alt = "Puzzle'ni birga yig'amiz!";
 export const size = { width: 1200, height: 630 };
@@ -59,7 +59,7 @@ export default async function RoomImage({ params }: { params: Promise<{ id: stri
         )}
       </div>
       <div style={{ display: "flex", flexDirection: "column", flex: 1, gap: 20 }}>
-        <div style={{ fontSize: 34, opacity: 0.85, display: "flex" }}>🧩 puzzle.javohir.ru</div>
+        <div style={{ fontSize: 34, opacity: 0.85, display: "flex" }}>🧩 {new URL(SITE_URL).host}</div>
         <div style={{ fontSize: 72, fontWeight: 800, lineHeight: 1.05, display: "flex" }}>
           Puzzle&apos;ni birga yig&apos;amiz!
         </div>

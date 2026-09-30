@@ -4,6 +4,8 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   images: {
     remotePatterns: [
+      { protocol: "https", hostname: "api.davradosh.uz" },
+      // Images uploaded before the move to davradosh.uz keep their old address.
       { protocol: "https", hostname: "api.puzzle.javohir.ru" },
       { protocol: "https", hostname: "images.unsplash.com" },
       { protocol: "https", hostname: "picsum.photos" },
