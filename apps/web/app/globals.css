@@ -147,29 +147,32 @@ body {
   }
 }
 
-@keyframes float-up {
+@keyframes rise {
   0% {
     opacity: 0;
-    transform: translate(-50%, -50%) scale(0.4);
+    transform: translate(-50%, 0) scale(0.5);
   }
-  15% {
+  12% {
     opacity: 1;
-    transform: translate(-50%, -80%) scale(1.15);
+    transform: translate(-50%, -12%) scale(1.15);
+  }
+  70% {
+    opacity: 0.9;
   }
   100% {
     opacity: 0;
-    transform: translate(calc(-50% + var(--drift, 0px)), -260%) scale(1);
+    transform: translate(calc(-50% + var(--sway, 0px)), -380%) scale(0.9);
   }
 }
 
 @keyframes fade-out {
   from {
     opacity: 1;
-    transform: translate(-50%, -50%);
+    transform: translate(-50%, 0);
   }
   to {
     opacity: 0;
-    transform: translate(-50%, -50%);
+    transform: translate(-50%, 0);
   }
 }
 

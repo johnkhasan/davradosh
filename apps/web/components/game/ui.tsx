@@ -227,8 +227,8 @@ const isFullscreen = () => {
   return Boolean(doc.fullscreenElement ?? doc.webkitFullscreenElement);
 };
 
-/** Real browser fullscreen toggle; hidden where the API is missing (e.g. iPhone Safari). */
-export function FullscreenButton({ className }: { className?: string }) {
+/** Browser fullscreen state; `supported` is false where the API is missing (e.g. iPhone Safari). */
+export function useFullscreen() {
   const active = useSyncExternalStore(subscribeFullscreen, isFullscreen, () => false);
   const supported = useSyncExternalStore(
     () => () => {},
@@ -238,8 +238,6 @@ export function FullscreenButton({ className }: { className?: string }) {
     },
     () => false,
   );
-  if (!supported) return null;
-
   const toggle = () => {
     const doc = document as FullscreenDoc;
     const el = document.documentElement as FullscreenEl;
@@ -252,7 +250,13 @@ export function FullscreenButton({ className }: { className?: string }) {
       el.webkitRequestFullscreen?.();
     }
   };
+  return { active, supported, toggle };
+}
 
+/** Real browser fullscreen toggle; hidden where the API is missing. */
+export function FullscreenButton({ className }: { className?: string }) {
+  const { active, supported, toggle } = useFullscreen();
+  if (!supported) return null;
   return (
     <ToolButton
       label={active ? "To'liq ekrandan chiqish" : "To'liq ekran"}

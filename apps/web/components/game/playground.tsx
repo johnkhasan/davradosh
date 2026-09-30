@@ -13,6 +13,8 @@ import {
   LayoutGrid,
   Lightbulb,
   LocateFixed,
+  Maximize,
+  Minimize,
   Minus,
   Plus,
   RotateCcw,
@@ -33,6 +35,7 @@ import {
 } from "@/lib/game/practice-save";
 import { setSoundEnabled } from "@/lib/game/sounds";
 import { cn } from "@/lib/utils";
+import { MenuAction, MenuTables, MenuToggle, MobileDock } from "./mobile-dock";
 import { PuzzleCanvas, type PuzzleCanvasHandle, type PuzzleProgress } from "./puzzle-canvas";
 import {
   formatDuration,
@@ -43,6 +46,7 @@ import {
   TablePicker,
   ToolButton,
   TooltipPlacementProvider,
+  useFullscreen,
   type Table,
 } from "./ui";
 
@@ -69,6 +73,7 @@ export function Playground() {
   const [ghost, setGhost] = useState(false);
   const [edgesOnly, setEdgesOnly] = useState(false);
   const [sound, setSound] = useState(true);
+  const fullscreen = useFullscreen();
   const [table, setTable] = useState<Table>(() =>
     saved && saved.table in TABLES ? (saved.table as Table) : "felt",
   );
@@ -254,7 +259,7 @@ export function Playground() {
           <TooltipPlacementProvider value="side">
             <nav
               aria-label="Asboblar"
-              className="absolute bottom-3 left-3 z-10 flex flex-row gap-1 rounded-card border border-border bg-surface/95 p-1.5 shadow-soft-md backdrop-blur sm:top-1/2 sm:bottom-auto sm:-translate-y-1/2 sm:flex-col"
+              className="absolute top-1/2 left-3 z-10 hidden -translate-y-1/2 flex-col gap-1 rounded-card border border-border bg-surface/95 p-1.5 shadow-soft-md backdrop-blur sm:flex"
             >
               <ToolButton
                 label="Asl rasm (Tab ni bosib turing)"
@@ -303,20 +308,12 @@ export function Playground() {
         />
 
         <TooltipPlacementProvider value="top-end">
-          <div className="absolute right-3 bottom-3 flex items-center gap-1 rounded-card border border-border bg-surface/95 p-1.5 shadow-soft-md backdrop-blur">
-            <TablePicker value={table} onChange={setTable} className="hidden sm:block" />
-            <ToolButton
-              label="Kichiklashtirish (−)"
-              className="hidden sm:flex"
-              onClick={() => canvasRef.current?.zoomBy(0.8)}
-            >
+          <div className="absolute right-3 bottom-3 hidden items-center gap-1 rounded-card border border-border bg-surface/95 p-1.5 shadow-soft-md backdrop-blur sm:flex">
+            <TablePicker value={table} onChange={setTable} />
+            <ToolButton label="Kichiklashtirish (−)" onClick={() => canvasRef.current?.zoomBy(0.8)}>
               <Minus />
             </ToolButton>
-            <ToolButton
-              label="Kattalashtirish (+)"
-              className="hidden sm:flex"
-              onClick={() => canvasRef.current?.zoomBy(1.25)}
-            >
+            <ToolButton label="Kattalashtirish (+)" onClick={() => canvasRef.current?.zoomBy(1.25)}>
               <Plus />
             </ToolButton>
             <ToolButton label="Hammasini ko'rsatish (F)" onClick={() => canvasRef.current?.fit()}>
@@ -325,6 +322,70 @@ export function Playground() {
             <FullscreenButton />
           </div>
         </TooltipPlacementProvider>
+
+        <MobileDock
+          menu={
+            <>
+              {!viewing && (
+                <>
+                  <MenuToggle icon={<Eye />} label="Asl rasm" checked={ghost} onChange={setGhost} />
+                  <MenuToggle
+                    icon={<Frame />}
+                    label="Faqat chekka bo'laklar"
+                    checked={edgesOnly}
+                    onChange={setEdgesOnly}
+                  />
+                  <MenuAction
+                    icon={<ImageUp />}
+                    label="Rasm yuklash"
+                    onClick={() => fileRef.current?.click()}
+                  />
+                  <MenuAction icon={<RotateCcw />} label="Qaytadan boshlash" onClick={restart} />
+                </>
+              )}
+              <MenuToggle
+                icon={sound ? <Volume2 /> : <VolumeX />}
+                label="Ovoz effektlari"
+                checked={sound}
+                onChange={setSound}
+              />
+              {fullscreen.supported && (
+                <MenuAction
+                  icon={fullscreen.active ? <Minimize /> : <Maximize />}
+                  label={fullscreen.active ? "To'liq ekrandan chiqish" : "To'liq ekran"}
+                  onClick={fullscreen.toggle}
+                />
+              )}
+              <MenuTables value={table} onChange={setTable} />
+            </>
+          }
+        >
+          {!viewing && (
+            <>
+              <ToolButton
+                label="Maslahat"
+                onClick={() => canvasRef.current?.hint()}
+                className="rounded-full"
+              >
+                <Lightbulb />
+              </ToolButton>
+              <ToolButton
+                label="Bo'laklarni tartiblash"
+                onClick={() => canvasRef.current?.arrange()}
+                className="rounded-full"
+              >
+                <LayoutGrid />
+              </ToolButton>
+            </>
+          )}
+          <ToolButton
+            label="Hammasini ko'rsatish"
+            onClick={() => canvasRef.current?.fit()}
+            className="rounded-full"
+          >
+            <LocateFixed />
+          </ToolButton>
+        </MobileDock>
 
         {debug && fps !== null && (
           <span className="absolute top-3 right-3 rounded-md bg-black/60 px-2 py-1 font-mono text-xs text-white">

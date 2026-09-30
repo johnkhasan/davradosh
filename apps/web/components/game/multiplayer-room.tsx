@@ -12,8 +12,11 @@ import {
   Lightbulb,
   LocateFixed,
   Link2,
+  Maximize,
+  Minimize,
   Minus,
   Plus,
+  Settings2,
   Volume2,
   VolumeX,
   WifiOff,
@@ -31,7 +34,8 @@ import { CursorLayer } from "./cursor-layer";
 import { ChatButton, ChatPanel } from "./chat-panel";
 import { PeopleButton, PeoplePanel, ViewerBanner } from "./people-panel";
 import { Minimap } from "./minimap";
-import { ReactionBar, ReactionLayer, ReactionPicker } from "./reactions";
+import { MenuAction, MenuTables, MenuToggle, MobileDock } from "./mobile-dock";
+import { ReactionBar, ReactionLayer } from "./reactions";
 import { AudioStartBanner, VideoBubbles, VoiceButtons, VoiceSettings } from "./voice";
 import {
   Avatar,
@@ -42,6 +46,7 @@ import {
   TablePicker,
   ToolButton,
   TooltipPlacementProvider,
+  useFullscreen,
   type Table,
 } from "./ui";
 
@@ -110,6 +115,7 @@ function RoomScreen({
   const [ghost, setGhost] = useState(false);
   const [edgesOnly, setEdgesOnly] = useState(false);
   const [sound, setSound] = useState(true);
+  const fullscreen = useFullscreen();
   const [table, setTable] = useState<Table>("felt");
   // The result card of a finished round can be closed to look at the picture.
   const [dismissedRound, setDismissedRound] = useState<number | null>(null);
@@ -265,7 +271,6 @@ function RoomScreen({
           belowActions={viewing}
         />
         <AudioStartBanner voice={voice} snapshot={voiceSnapshot} />
-        <ReactionLayer controller={controller} players={players} />
         {isViewer && room && !followed && (
           <ViewerBanner
             controller={controller}
@@ -321,7 +326,7 @@ function RoomScreen({
           <TooltipPlacementProvider value="side">
             <nav
               aria-label="Asboblar"
-              className="absolute bottom-3 left-3 z-10 flex flex-row gap-1 rounded-card border border-border bg-surface/95 p-1.5 shadow-soft-md backdrop-blur sm:top-1/2 sm:bottom-auto sm:-translate-y-1/2 sm:flex-col"
+              className="absolute top-1/2 left-3 z-10 hidden -translate-y-1/2 flex-col gap-1 rounded-card border border-border bg-surface/95 p-1.5 shadow-soft-md backdrop-blur sm:flex"
             >
               <ToolButton
                 label="Asl rasm (Tab ni bosib turing)"
@@ -370,18 +375,16 @@ function RoomScreen({
         )}
 
         <TooltipPlacementProvider value="top-end">
-          <div className="absolute right-3 bottom-3 flex items-center gap-1 rounded-card border border-border bg-surface/95 p-1.5 shadow-soft-md backdrop-blur">
-            <TablePicker value={table} onChange={setTable} className="hidden sm:block" />
+          <div className="absolute right-3 bottom-3 hidden items-center gap-1 rounded-card border border-border bg-surface/95 p-1.5 shadow-soft-md backdrop-blur sm:flex">
+            <TablePicker value={table} onChange={setTable} />
             <ToolButton
               label="Kichiklashtirish (−)"
-              className="hidden sm:flex"
               onClick={() => controller.puzzleView?.zoomBy(0.8)}
             >
               <Minus />
             </ToolButton>
             <ToolButton
               label="Kattalashtirish (+)"
-              className="hidden sm:flex"
               onClick={() => controller.puzzleView?.zoomBy(1.25)}
             >
               <Plus />
@@ -399,10 +402,77 @@ function RoomScreen({
         <div className="absolute bottom-3 left-1/2 hidden -translate-x-1/2 sm:block">
           <ReactionBar onReact={(emoji) => controller.react(emoji)} />
         </div>
-        {/* Phones: the bottom row is taken by the tools, so reactions open from a button above it. */}
-        <div className="absolute right-3 bottom-[4.75rem] z-20 sm:hidden">
-          <ReactionPicker onReact={(emoji) => controller.react(emoji)} />
-        </div>
+
+        <MobileDock
+          onReact={(emoji) => controller.react(emoji)}
+          menu={
+            <>
+              {!viewing && (
+                <>
+                  <MenuToggle icon={<Eye />} label="Asl rasm" checked={ghost} onChange={setGhost} />
+                  <MenuToggle
+                    icon={<Frame />}
+                    label="Faqat chekka bo'laklar"
+                    checked={edgesOnly}
+                    onChange={setEdgesOnly}
+                  />
+                  {isHost && (
+                    <MenuAction
+                      icon={<LayoutGrid />}
+                      label="Bo'laklarni tartiblash"
+                      hint="hamma uchun"
+                      onClick={() => controller.arrange()}
+                    />
+                  )}
+                </>
+              )}
+              <MenuToggle
+                icon={sound ? <Volume2 /> : <VolumeX />}
+                label="Ovoz effektlari"
+                checked={sound}
+                onChange={setSound}
+              />
+              {fullscreen.supported && (
+                <MenuAction
+                  icon={fullscreen.active ? <Minimize /> : <Maximize />}
+                  label={fullscreen.active ? "To'liq ekrandan chiqish" : "To'liq ekran"}
+                  onClick={fullscreen.toggle}
+                />
+              )}
+              {!isViewer && voiceSnapshot.status !== "unavailable" && (
+                <MenuAction
+                  icon={<Settings2 />}
+                  label="Ovoz va video sozlamalari"
+                  onClick={() => setVoiceSettings(true)}
+                />
+              )}
+              <MenuTables value={table} onChange={setTable} />
+            </>
+          }
+        >
+          {!viewing && !isViewer && (
+            <ToolButton label="Maslahat" onClick={() => controller.hint()} className="rounded-full">
+              <Lightbulb />
+            </ToolButton>
+          )}
+          {!isViewer && voiceSnapshot.status !== "unavailable" && (
+            <>
+              <VoiceButtons
+                voice={voice}
+                snapshot={voiceSnapshot}
+                onOpenSettings={() => setVoiceSettings((v) => !v)}
+              />
+              <span className="mx-0.5 my-1.5 w-px self-stretch bg-border" aria-hidden />
+            </>
+          )}
+          <ToolButton
+            label="Hammasini ko'rsatish"
+            onClick={() => controller.puzzleView?.fitToContent()}
+            className="rounded-full"
+          >
+            <LocateFixed />
+          </ToolButton>
+        </MobileDock>
 
         <div className="absolute bottom-3 left-3 hidden rounded-card border border-border bg-surface/80 p-1.5 shadow-soft-md backdrop-blur lg:block">
           {!viewing && <Minimap controller={controller} players={players} me={me} />}
@@ -470,6 +540,8 @@ function RoomScreen({
             )}
           </div>
         )}
+
+        <ReactionLayer controller={controller} players={players} me={me} />
 
         {completed && resultOpen && (
           <CompletedDialog

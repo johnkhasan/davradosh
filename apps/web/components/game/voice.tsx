@@ -27,7 +27,10 @@ export function VoiceButtons({
       : "Mikrofonni yoqish (M)";
   return (
     <>
-      <span className="mx-0.5 h-px w-auto bg-border max-sm:h-auto max-sm:w-px" aria-hidden />
+      <span
+        className="mx-0.5 h-px w-auto self-stretch bg-border max-sm:my-1.5 max-sm:h-auto max-sm:w-px"
+        aria-hidden
+      />
       <ToolButton
         label={micLabel}
         active={snapshot.micOn || snapshot.pushToTalk}

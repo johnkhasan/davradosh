@@ -1,68 +1,80 @@
 "use client";
 
 import { REACTION_EMOJIS, type PlayerDTO, type ReactionEmoji } from "@puzzle/shared";
-import { SmilePlus, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { Reaction, RoomController } from "@/lib/realtime/room-controller";
 
-const LIFETIME_MS = 1800;
+const LIFETIME_MS = 2600;
 
 interface FloatingReaction extends Reaction {
-  screenX: number;
-  screenY: number;
+  name: string;
   color: string;
-  drift: number;
+  /** Horizontal offset from the centre, px. */
+  offset: number;
+  sway: number;
 }
 
-/** Emoji that float up from the sender's cursor and fade out. */
+/**
+ * Reactions rise from the bottom centre of the screen, like in a video call, with
+ * the sender's name. Above every panel but click-through, and only over the lower
+ * part of the table so they never cover the pieces for long.
+ */
 export function ReactionLayer({
   controller,
   players,
+  me,
 }: {
   controller: RoomController;
   players: PlayerDTO[];
+  me: string;
 }) {
   const [items, setItems] = useState<FloatingReaction[]>([]);
 
   useEffect(
     () =>
       controller.onReaction((reaction) => {
-        const view = controller.puzzleView;
-        if (!view) return;
-        const screen = view.camera.toScreen(reaction.x, reaction.y);
-        const color = players.find((p) => p.id === reaction.playerId)?.color ?? "#6C5CE7";
-        const item = {
+        const player = players.find((p) => p.id === reaction.playerId);
+        const item: FloatingReaction = {
           ...reaction,
-          screenX: screen.x,
-          screenY: screen.y,
-          color,
-          drift: Math.random() * 40 - 20,
+          name: reaction.playerId === me ? "Siz" : (player?.name ?? ""),
+          color: player?.color ?? "#6C5CE7",
+          offset: Math.round(Math.random() * 120 - 60),
+          sway: Math.round(Math.random() * 40 - 20),
         };
-        setItems((current) => [...current.slice(-30), item]);
+        setItems((current) => [...current.slice(-24), item]);
         window.setTimeout(
           () => setItems((current) => current.filter((i) => i.id !== reaction.id)),
           LIFETIME_MS,
         );
       }),
-    [controller, players],
+    [controller, players, me],
   );
 
   return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
+    <div
+      className="pointer-events-none absolute inset-x-0 bottom-[4.5rem] z-40 h-[45%] overflow-hidden sm:bottom-16"
+      aria-hidden
+    >
       {items.map((item) => (
         <span
           key={item.id}
-          className="absolute text-4xl motion-safe:animate-[float-up_1.8s_ease-out_forwards] motion-reduce:animate-[fade-out_1.8s_ease-out_forwards]"
+          className="absolute bottom-0 flex flex-col items-center gap-0.5 motion-safe:animate-[rise_2.6s_ease-out_forwards] motion-reduce:animate-[fade-out_2.6s_ease-out_forwards]"
           style={
             {
-              left: item.screenX,
-              top: item.screenY,
-              "--drift": `${item.drift}px`,
-              filter: `drop-shadow(0 2px 0 ${item.color}) drop-shadow(0 4px 8px rgb(0 0 0 / 0.25))`,
+              left: `calc(50% + ${item.offset}px)`,
+              "--sway": `${item.sway}px`,
             } as React.CSSProperties
           }
         >
-          {item.emoji}
+          <span className="text-4xl drop-shadow-[0_3px_6px_rgb(0_0_0/0.3)]">{item.emoji}</span>
+          {item.name && (
+            <span
+              className="max-w-24 truncate rounded-full px-1.5 py-px text-[10px] font-semibold text-white shadow-soft-sm"
+              style={{ backgroundColor: item.color }}
+            >
+              {item.name}
+            </span>
+          )}
         </span>
       ))}
     </div>
@@ -95,46 +107,6 @@ export function ReactionButton({
     >
       {emoji}
     </button>
-  );
-}
-
-/** Touch screens: a button that opens the reactions as a 4×2 grid; it stays open for several taps. */
-export function ReactionPicker({ onReact }: { onReact: (emoji: ReactionEmoji) => void }) {
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const close = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
-    };
-    window.addEventListener("pointerdown", close);
-    return () => window.removeEventListener("pointerdown", close);
-  }, [open]);
-
-  return (
-    <div ref={rootRef} className="flex flex-col items-end gap-2">
-      {open && (
-        <div
-          role="toolbar"
-          aria-label="Reaksiyalar"
-          className="grid grid-cols-4 gap-1 rounded-card border border-border bg-surface/95 p-1.5 shadow-soft-lg backdrop-blur motion-safe:animate-[pop_150ms_ease-out]"
-        >
-          {REACTION_EMOJIS.map((emoji, index) => (
-            <ReactionButton key={emoji} emoji={emoji} index={index} onReact={onReact} size="lg" />
-          ))}
-        </div>
-      )}
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        aria-label={open ? "Reaksiyalarni yopish" : "Reaksiya yuborish"}
-        className="flex size-12 touch-manipulation items-center justify-center rounded-full border border-border bg-surface/95 text-foreground shadow-soft-md backdrop-blur active:scale-95"
-      >
-        {open ? <X className="size-5" aria-hidden /> : <SmilePlus className="size-5" aria-hidden />}
-      </button>
-    </div>
   );
 }
 
