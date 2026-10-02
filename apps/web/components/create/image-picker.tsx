@@ -122,42 +122,49 @@ function Gallery({
         </div>
       )}
       {/* Padding (offset by the negative margin) leaves room for the selection ring,
-          which the scroll container would otherwise clip. */}
-      <div className="-m-1.5 grid max-h-[52vh] grid-cols-2 gap-2 overflow-y-auto p-1.5 sm:grid-cols-3">
-        {!data &&
-          Array.from({ length: 9 }, (_, i) => (
-            <div key={i} className="aspect-[4/3] animate-pulse rounded-control bg-surface-muted" />
-          ))}
-        {data?.items.map((item) => {
-          const active = selected?.id === item.id && selected.provider === item.provider;
-          return (
-            <button
-              key={`${item.provider}-${item.id}`}
-              type="button"
-              onClick={() => onSelect(item)}
-              aria-pressed={active}
-              aria-label={`Rasm: ${item.author}`}
-              className={cn(
-                "group relative aspect-[4/3] overflow-hidden rounded-control bg-surface-muted ring-offset-2 ring-offset-surface transition focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none",
-                active && "ring-3 ring-primary",
-              )}
-            >
-              <Image
-                src={item.thumbUrl}
-                alt=""
-                fill
-                unoptimized
-                // Picsum rejects hotlinked thumbnails that carry our domain as Referer (403).
-                referrerPolicy="no-referrer"
-                sizes="(max-width: 640px) 50vw, 33vw"
-                className="object-cover transition-transform duration-300 group-hover:scale-105"
+          which the scroll container would otherwise clip. The scroll box wraps the
+          grid instead of being it: iOS Safari squashes aspect-ratio rows in a grid
+          whose own height is capped, so the pictures piled on top of each other. */}
+      <div className="-m-1.5 max-h-[52vh] overflow-y-auto overscroll-contain p-1.5">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          {!data &&
+            Array.from({ length: 9 }, (_, i) => (
+              <div
+                key={i}
+                className="aspect-[4/3] animate-pulse rounded-control bg-surface-muted"
               />
-              <span className="absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/70 to-transparent px-2 pt-4 pb-1 text-left text-xs text-white opacity-0 transition-opacity group-hover:opacity-100">
-                {item.author}
-              </span>
-            </button>
-          );
-        })}
+            ))}
+          {data?.items.map((item) => {
+            const active = selected?.id === item.id && selected.provider === item.provider;
+            return (
+              <button
+                key={`${item.provider}-${item.id}`}
+                type="button"
+                onClick={() => onSelect(item)}
+                aria-pressed={active}
+                aria-label={`Rasm: ${item.author}`}
+                className={cn(
+                  "group relative aspect-[4/3] overflow-hidden rounded-control bg-surface-muted ring-offset-2 ring-offset-surface transition focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none",
+                  active && "ring-3 ring-primary",
+                )}
+              >
+                <Image
+                  src={item.thumbUrl}
+                  alt=""
+                  fill
+                  unoptimized
+                  // Picsum rejects hotlinked thumbnails that carry our domain as Referer (403).
+                  referrerPolicy="no-referrer"
+                  sizes="(max-width: 640px) 50vw, 33vw"
+                  className="object-cover transition-transform duration-300 group-hover:scale-105"
+                />
+                <span className="absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/70 to-transparent px-2 pt-4 pb-1 text-left text-xs text-white opacity-0 transition-opacity group-hover:opacity-100">
+                  {item.author}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </div>
       <p className="mt-2 text-xs text-muted">Rasmlar: Unsplash mualliflari</p>
     </div>
