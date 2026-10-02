@@ -35,6 +35,11 @@ export function SiteFooter() {
                 📖 Mafia qoidalari
               </Link>
             </li>
+            <li>
+              <Link href="/privacy" className="hover:text-foreground">
+                🔒 Maxfiylik siyosati
+              </Link>
+            </li>
           </ul>
         </nav>
         <div className="flex flex-col gap-2 sm:items-end">

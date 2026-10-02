@@ -10,6 +10,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: `${SITE_URL}/mafia/qoidalar`, lastModified, changeFrequency: "monthly", priority: 0.7 },
     { url: `${SITE_URL}/create`, lastModified, changeFrequency: "monthly", priority: 0.7 },
     { url: `${SITE_URL}/play`, lastModified, changeFrequency: "monthly", priority: 0.6 },
+    { url: `${SITE_URL}/privacy`, lastModified, changeFrequency: "yearly", priority: 0.3 },
     { url: `${SITE_URL}/join`, lastModified, changeFrequency: "yearly", priority: 0.4 },
   ];
 }
