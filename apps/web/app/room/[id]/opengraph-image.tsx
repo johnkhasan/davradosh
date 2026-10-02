@@ -59,7 +59,9 @@ export default async function RoomImage({ params }: { params: Promise<{ id: stri
         )}
       </div>
       <div style={{ display: "flex", flexDirection: "column", flex: 1, gap: 20 }}>
-        <div style={{ fontSize: 34, opacity: 0.85, display: "flex" }}>🧩 {new URL(SITE_URL).host}</div>
+        <div style={{ fontSize: 34, opacity: 0.85, display: "flex" }}>
+          🧩 {new URL(SITE_URL).host}
+        </div>
         <div style={{ fontSize: 72, fontWeight: 800, lineHeight: 1.05, display: "flex" }}>
           Puzzle&apos;ni birga yig&apos;amiz!
         </div>
