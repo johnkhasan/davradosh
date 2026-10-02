@@ -19,9 +19,9 @@ services:
       # Uploaded images are served by the app (immutable, CORS-readable).
       SERVE_UPLOADS: "true"
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      # The site moved to davradosh.uz; puzzle.javohir.ru and previews stay allowed via .env.
+      # The site moved to davradosh.uz; puzzle.javohir.ru and older previews stay allowed via .env; Vercel previews are davradosh-*.
       # capacitor://localhost and https://localhost are the iOS and Android apps.
-      CORS_ORIGINS: ${CORS_ORIGINS},https://davradosh.uz,https://www.davradosh.uz,capacitor://localhost,https://localhost
+      CORS_ORIGINS: ${CORS_ORIGINS},https://davradosh.uz,https://www.davradosh.uz,https://davradosh-*-jvhrhsnvs-projects.vercel.app,capacitor://localhost,https://localhost
     volumes:
       - /srv/puzzle/uploads:/app/uploads
     networks:
