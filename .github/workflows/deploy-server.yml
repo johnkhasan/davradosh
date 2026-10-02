@@ -66,7 +66,7 @@ jobs:
         run: |
           docker run -d --name smoke --network host \
             -e DATABASE_URL=postgresql://puzzle:puzzle@localhost:5432/puzzle \
-            -e CORS_ORIGINS=https://puzzle.javohir.ru \
+            -e CORS_ORIGINS=https://davradosh.uz \
             -e PUBLIC_UPLOAD_URL=http://localhost:4000/uploads \
             "$IMAGE:${{ github.sha }}"
           for i in $(seq 1 30); do
@@ -122,7 +122,7 @@ jobs:
             docker compose pull server
             docker compose up -d --remove-orphans
             for i in $(seq 1 30); do
-              if curl -fsS https://api.puzzle.javohir.ru/health >/dev/null; then echo "healthy"; exit 0; fi
+              if curl -fsS https://api.davradosh.uz/health >/dev/null; then echo "healthy"; exit 0; fi
               sleep 2
             done
             echo "health check failed, rolling back to ${PREVIOUS:-latest}"

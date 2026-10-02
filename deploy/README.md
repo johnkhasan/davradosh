@@ -1,18 +1,23 @@
 # Deploy qo'llanmasi
 
-| Qism                      | Qayerda                      | Manzil                        |
-| ------------------------- | ---------------------------- | ----------------------------- |
-| Frontend (Next.js)        | Vercel                       | https://puzzle.javohir.ru     |
-| API + WebSocket + rasmlar | VPS, `/srv/puzzle` (Compose) | https://api.puzzle.javohir.ru |
-| Ovoz/video (LiveKit)      | VPS, `/srv/puzzle` (Compose) | wss://rtc.puzzle.javohir.ru   |
+| Qism                      | Qayerda                      | Manzil                   |
+| ------------------------- | ---------------------------- | ------------------------ |
+| Frontend (Next.js)        | Vercel                       | https://davradosh.uz     |
+| API + WebSocket + rasmlar | VPS, `/srv/puzzle` (Compose) | https://api.davradosh.uz |
+| Ovoz/video (LiveKit)      | VPS, `/srv/puzzle` (Compose) | wss://rtc.davradosh.uz   |
+
+Eski manzillar (`puzzle.javohir.ru` davradosh.uz'ga 308 bilan yo'naltiriladi,
+`api.puzzle.javohir.ru`, `rtc.puzzle.javohir.ru`) ishlab turishi shart: eski rasmlar
+bazada shu manzil bilan saqlangan, mobil test buildlar ham shunga ulangan.
 
 VPS'da 80/443 portlarni umumiy `hsbch-nginx-1` konteyneri boshqaradi (boshqa
-loyihalar ham shu orqali ishlaydi). Puzzle unga ikkita `server` bloki bilan ulanadi:
-[`nginx/puzzle.conf`](./nginx/puzzle.conf).
+loyihalar ham shu orqali ishlaydi). Puzzle unga `server` bloklari bilan ulanadi:
+[`nginx/davradosh.conf`](./nginx/davradosh.conf) (yangi manzillar, sertifikat
+`/srv/hsbch/certs/davradosh.uz`) va [`nginx/puzzle.conf`](./nginx/puzzle.conf) (eski manzillar).
 
 ```
-Internet ─▶ hsbch-nginx-1 (443, TLS) ─┬─ api.puzzle ─▶ puzzle-server:4000  (hsbch_default tarmog'i)
-                                      └─ rtc.puzzle ─▶ 172.18.0.1:7880     (puzzle-livekit, host tarmog'i)
+Internet ─▶ hsbch-nginx-1 (443, TLS) ─┬─ api.davradosh.uz, api.puzzle ─▶ puzzle-server:4000  (hsbch_default tarmog'i)
+                                      └─ rtc.davradosh.uz, rtc.puzzle ─▶ 172.18.0.1:7880     (puzzle-livekit, host tarmog'i)
 puzzle-server ─▶ puzzle-postgres (ichki tarmoq)
 WebRTC media: UDP 50000–60000, TCP 7881, TURN UDP 3478 (to'g'ridan-to'g'ri LiveKit'ga)
 ```
@@ -100,9 +105,9 @@ xato bo'lsa oldingi versiyaga qaytadi.
 ## 6. Vercel (frontend)
 
 - Root Directory: `apps/web`
-- Environment: `NEXT_PUBLIC_API_URL=https://api.puzzle.javohir.ru`,
-  `NEXT_PUBLIC_WS_URL=wss://api.puzzle.javohir.ru`
-- Domain: `puzzle.javohir.ru`
+- Environment: `NEXT_PUBLIC_SITE_URL=https://davradosh.uz`,
+  `NEXT_PUBLIC_API_URL=https://api.davradosh.uz`, `NEXT_PUBLIC_WS_URL=wss://api.davradosh.uz`
+- Domain: `davradosh.uz` (+ `www`); `puzzle.javohir.ru` davradosh.uz'ga 308 bilan yo'naltiriladi
 
 ## 7. Backup va monitoring
 

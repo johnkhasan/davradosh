@@ -1,7 +1,7 @@
 # LiveKit SFU for voice/video. API keys come from LIVEKIT_KEYS (docker-compose).
 port: 7880
 # Signalling is not public: nginx (in Docker) reaches it via the proxy
-# network's gateway and terminates TLS for rtc.puzzle.javohir.ru.
+# network's gateway and terminates TLS for rtc.davradosh.uz (and the old rtc.puzzle.javohir.ru).
 bind_addresses:
   - 127.0.0.1
   - 172.18.0.1
@@ -14,7 +14,7 @@ rtc:
 turn:
   # Relays media for players behind strict NATs / corporate firewalls.
   enabled: true
-  domain: rtc.puzzle.javohir.ru
+  domain: rtc.davradosh.uz
   udp_port: 3478
 room:
   # Same limit as the puzzle rooms.
