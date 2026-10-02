@@ -19,6 +19,8 @@ services:
       # Uploaded images are served by the app (immutable, CORS-readable).
       SERVE_UPLOADS: "true"
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      # The site moved to davradosh.uz; puzzle.javohir.ru and previews stay allowed via .env.
+      CORS_ORIGINS: ${CORS_ORIGINS},https://davradosh.uz,https://www.davradosh.uz
     volumes:
       - /srv/puzzle/uploads:/app/uploads
     networks:
