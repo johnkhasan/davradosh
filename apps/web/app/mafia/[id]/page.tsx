@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { MafiaRoomLoader } from "@/components/mafia/room-loader";
 
-// Work in progress: not linked anywhere and not indexed.
+// Private invites: link previews read them, search engines skip them.
 export const metadata: Metadata = {
   title: "Mafia stoli",
   description: "Sizni mafia o'yiniga taklif qilishdi. Havolani oching va stolga o'tiring.",

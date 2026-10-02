@@ -13,12 +13,20 @@ import { ArrowLeft } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { JsonLd } from "@/components/site/json-ld";
+import { OPEN_GRAPH, RULES_DESCRIPTION, RULES_TITLE, rulesJsonLd } from "@/lib/seo";
 
-// Part of the hidden mafia section: reachable from /mafia, not indexed yet.
 export const metadata: Metadata = {
-  title: "Mafia qoidalari",
-  description: "Sport mafiasining rasmiy qoidalari: rollar, kun va tun, ovoz berish, folllar.",
-  robots: { index: false, follow: false },
+  title: { absolute: RULES_TITLE },
+  description: RULES_DESCRIPTION,
+  alternates: { canonical: "/mafia/qoidalar" },
+  openGraph: {
+    ...OPEN_GRAPH,
+    type: "article",
+    url: "/mafia/qoidalar",
+    title: RULES_TITLE,
+    description: RULES_DESCRIPTION,
+  },
 };
 
 const s = (ms: number) => Math.round(ms / 1000);
@@ -55,6 +63,7 @@ const sizes = Array.from(
 export default function MafiaRulesPage() {
   return (
     <div className="mx-auto w-full max-w-3xl px-4 pt-6 pb-20">
+      <JsonLd data={rulesJsonLd()} />
       <Link
         href="/mafia"
         className="inline-flex items-center gap-1.5 text-sm font-medium text-muted hover:text-foreground"
