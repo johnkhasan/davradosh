@@ -35,6 +35,8 @@ const fakeFetch: typeof fetch = async (input) => {
   if (href.includes("/v2/list")) {
     return Response.json([
       { id: "10", author: "Test Author", width: 2500, height: 1667, url: "https://unsplash.com/x" },
+      // Hidden from the gallery (see HIDDEN in images/gallery.ts).
+      { id: "31", author: "Hidden", width: 3264, height: 4912, url: "https://unsplash.com/y" },
     ]);
   }
   if (href.endsWith("/info"))
@@ -246,6 +248,13 @@ describe("images", () => {
     };
     expect(body.categories).toEqual([]);
     expect(body.items[0]).toMatchObject({ provider: "picsum", id: "10" });
+    expect(body.items.some((item) => item.id === "31")).toBe(false);
+    const hidden = await fetch(`${url}/api/gallery/import`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ provider: "picsum", id: "31" }),
+    });
+    expect(hidden.ok).toBe(false);
 
     const importOnce = () =>
       fetch(`${url}/api/gallery/import`, {

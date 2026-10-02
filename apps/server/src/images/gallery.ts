@@ -23,6 +23,19 @@ export type GalleryCategory = keyof typeof GALLERY_CATEGORIES;
 
 const CACHE_MS = 60 * 60 * 1000;
 
+/**
+ * Photos kept out of the gallery (not a fit for a family game), by provider id.
+ * Picsum serves Unsplash photos, so a photo is listed under both ids.
+ */
+const HIDDEN: Record<GalleryItem["provider"], ReadonlySet<string>> = {
+  // Bare feet (Unsplash 7Vz3DtQDT3Q).
+  picsum: new Set(["31"]),
+  unsplash: new Set(["7Vz3DtQDT3Q"]),
+};
+
+export const isHiddenPhoto = (provider: GalleryItem["provider"], id: string) =>
+  HIDDEN[provider].has(id);
+
 type Fetch = typeof fetch;
 
 /**
@@ -50,16 +63,17 @@ export class GalleryService {
     const key = this.opts.unsplashKey ? `unsplash:${category}` : "picsum";
     const cached = this.cache.get(key);
     if (cached && Date.now() - cached.at < CACHE_MS) return cached.items;
-    const items = this.opts.unsplashKey
-      ? await this.listUnsplash(category)
-      : await this.listPicsum();
+    const items = (
+      this.opts.unsplashKey ? await this.listUnsplash(category) : await this.listPicsum()
+    ).filter((item) => !isHiddenPhoto(item.provider, item.id));
     this.cache.set(key, { at: Date.now(), items });
     return items;
   }
 
   /** Downloads a gallery image once and stores it like an upload. */
   async import(provider: GalleryItem["provider"], sourceId: string): Promise<ImageDTO> {
-    if (!/^[A-Za-z0-9_-]{1,64}$/.test(sourceId)) throw new Error("Invalid gallery id");
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(sourceId) || isHiddenPhoto(provider, sourceId))
+      throw new Error("Invalid gallery id");
     const imageId = `${provider}-${sourceId}`;
     const existing = await this.opts.repository.getImage(imageId);
     if (existing) return existing;
