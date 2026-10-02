@@ -335,3 +335,39 @@ body {
     box-shadow: 0 0 0 3px rgb(0 194 168 / 0.45);
   }
 }
+
+/* 404: the missing piece hovers over its empty slot, almost drops in, then drifts off again. */
+@keyframes lost-piece {
+  0%,
+  100% {
+    transform: translate(46%, -58%) rotate(14deg);
+  }
+  45% {
+    transform: translate(8%, -10%) rotate(4deg);
+  }
+  55% {
+    transform: translate(10%, -14%) rotate(6deg);
+  }
+}
+@keyframes lost-slot {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+.lost-piece {
+  animation: lost-piece 4.5s cubic-bezier(0.45, 0, 0.25, 1) infinite;
+}
+.lost-slot {
+  animation: lost-slot 4.5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lost-piece,
+  .lost-slot {
+    animation: none;
+  }
+}
