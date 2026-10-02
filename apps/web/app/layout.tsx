@@ -27,6 +27,7 @@ export const metadata: Metadata = {
   openGraph: OPEN_GRAPH,
   twitter: { card: "summary_large_image" },
   formatDetection: { telephone: false },
+  verification: { google: "CFbKqzCk-virQvNsJi0pFyuAQN_6F5G2gCxYptFO6No" },
 };
 
 export const viewport: Viewport = {
