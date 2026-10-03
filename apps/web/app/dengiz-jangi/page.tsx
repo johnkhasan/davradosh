@@ -1,13 +1,7 @@
-import {
-  CELLS,
-  SHOT_AROUND,
-  SHOT_HIT,
-  SHOT_MISS,
-  cellIndex,
-} from "@puzzle/shared/games/battleship";
 import type { Metadata } from "next";
 import { CreateBattleship } from "@/components/games/battleship/create-battleship";
-import { SEA_STYLE, SeaGrid, type SeaShip } from "@/components/games/battleship/sea-grid";
+import { SEA_STYLE } from "@/components/games/battleship/sea-grid";
+import { BattleshipDemo } from "@/components/landing/battleship-demo";
 import { JsonLd } from "@/components/site/json-ld";
 import { SiteFooter } from "@/components/site/site-footer";
 import { SiteHeader } from "@/components/site/site-header";
@@ -103,42 +97,6 @@ const jsonLd = {
   ],
 };
 
-// A battle in progress for the hero picture.
-const DEMO_SHIPS: SeaShip[] = [
-  { x: 1, y: 1, length: 4, vertical: false, sunk: true },
-  { x: 7, y: 0, length: 1, vertical: false, sunk: true },
-  { x: 8, y: 4, length: 3, vertical: true },
-];
-const DEMO_SHOTS = (() => {
-  const shots = Array<number>(CELLS).fill(0);
-  for (const x of [1, 2, 3, 4]) shots[cellIndex(x, 1)] = SHOT_HIT;
-  shots[cellIndex(7, 0)] = SHOT_HIT;
-  for (let x = 0; x <= 5; x++) for (const y of [0, 2]) shots[cellIndex(x, y)] ||= SHOT_AROUND;
-  shots[cellIndex(0, 1)] = SHOT_AROUND;
-  shots[cellIndex(5, 1)] = SHOT_AROUND;
-  for (const [x, y] of [
-    [6, 0],
-    [8, 0],
-    [6, 1],
-    [7, 1],
-    [8, 1],
-  ] as const)
-    shots[cellIndex(x, y)] = SHOT_AROUND;
-  shots[cellIndex(8, 5)] = SHOT_HIT;
-  shots[cellIndex(8, 4)] = SHOT_HIT;
-  for (const [x, y] of [
-    [3, 5],
-    [5, 7],
-    [1, 8],
-    [6, 3],
-    [2, 4],
-    [9, 9],
-    [4, 9],
-  ] as const)
-    shots[cellIndex(x, y)] = SHOT_MISS;
-  return shots;
-})();
-
 const RULES: Array<[string, string]> = [
   [
     "Flot.",
@@ -186,15 +144,7 @@ export default function DengizJangiPage() {
           <div className="relative mx-auto w-full max-w-[420px]" style={SEA_STYLE}>
             <div className="absolute inset-4 -z-10 rounded-[40px] bg-gradient-to-br from-[#2f8fe0]/35 via-[#6C5CE7]/20 to-[#00c2a8]/25 blur-3xl" />
             <div className="rounded-[28px] border border-border bg-surface p-4 shadow-soft-lg">
-              <SeaGrid
-                label="Dengiz jangi o'yinidan lavha"
-                ships={DEMO_SHIPS.filter((s) => s.sunk)}
-                shots={DEMO_SHOTS}
-                lastShot={cellIndex(8, 5)}
-              />
-              <p className="mt-2 text-center text-sm font-semibold text-primary">
-                Tegdi! Yana oting 🎯
-              </p>
+              <BattleshipDemo />
             </div>
           </div>
         </section>

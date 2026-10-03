@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { CreateChessTable } from "@/components/games/chess/create-chess-table";
-import { StaticChessBoard } from "@/components/games/chess/pieces";
+import { ChessDemo } from "@/components/landing/chess-demo";
 import { JsonLd } from "@/components/site/json-ld";
 import { SiteFooter } from "@/components/site/site-footer";
 import { SiteHeader } from "@/components/site/site-header";
@@ -25,9 +25,6 @@ export const metadata: Metadata = {
   alternates: { canonical: "/shaxmat" },
   openGraph: { ...OPEN_GRAPH, title: TITLE, description: DESCRIPTION, url: "/shaxmat" },
 };
-
-/** Italian game after 3.Bc4: the last move is highlighted. */
-const DEMO_FEN = "r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 3 3";
 
 const RULES: { title: string; text: string }[] = [
   {
@@ -127,7 +124,7 @@ export default function ChessPage() {
           </div>
           <div className="relative mx-auto w-full max-w-md">
             <div className="absolute inset-4 -z-10 rounded-[40px] bg-gradient-to-br from-[#b48762]/40 via-[#6C5CE7]/25 to-[#f0dcbc]/40 blur-3xl" />
-            <StaticChessBoard fen={DEMO_FEN} highlight={["f1", "c4"]} />
+            <ChessDemo />
           </div>
         </section>
 

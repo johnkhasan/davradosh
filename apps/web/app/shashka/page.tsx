@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import { StaticBoard } from "@/components/games/checkers/board-art";
 import { CreateCheckersTable } from "@/components/games/checkers/create-table";
+import { CheckersDemo } from "@/components/landing/checkers-demo";
 import { JsonLd } from "@/components/site/json-ld";
 import { SiteFooter } from "@/components/site/site-footer";
 import { SiteHeader } from "@/components/site/site-header";
@@ -86,21 +86,6 @@ const RULES: { title: string; text: string }[] = [
   },
 ];
 
-/** A mid-game position for the hero picture: white's king on d4 is about to take e5. */
-const DEMO_PIECES = [
-  ...["a1", "c1", "e1", "b2", "f2", "h2", "c3", "g3"].map((s) => ({ s, owner: 0 as const })),
-  { s: "d4", owner: 0 as const, king: true },
-  ...["b6", "h6", "a7", "c7", "e7", "g7", "b8", "d8", "h8"].map((s) => ({
-    s,
-    owner: 1 as const,
-  })),
-  { s: "e5", owner: 1 as const },
-].map((p) => ({ square: toSquare(p.s), owner: p.owner, king: "king" in p }));
-
-function toSquare(name: string) {
-  return (Number(name[1]) - 1) * 8 + "abcdefgh".indexOf(name[0]!);
-}
-
 const faqJsonLd = {
   "@context": "https://schema.org",
   "@type": "FAQPage",
@@ -135,7 +120,7 @@ export default function ShashkaPage() {
           </div>
           <div className="relative mx-auto w-full max-w-[460px]">
             <div className="absolute inset-4 -z-10 rounded-[40px] bg-gradient-to-br from-[#2f5d50]/40 via-[#c69c6d]/25 to-[#4a2c17]/30 blur-3xl" />
-            <StaticBoard pieces={DEMO_PIECES} marks={[toSquare("f6")]} />
+            <CheckersDemo />
           </div>
         </section>
 

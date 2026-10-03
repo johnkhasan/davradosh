@@ -1,8 +1,8 @@
 import { TABLE_GAMES } from "@puzzle/shared/games";
-import { UNO_CARDS, UNO_HAND_SIZE, type UnoCard } from "@puzzle/shared/games/uno";
+import { UNO_HAND_SIZE } from "@puzzle/shared/games/uno";
 import type { Metadata } from "next";
-import { UnoCardBack, UnoCardFace } from "@/components/games/uno/card";
 import { UnoCreate } from "@/components/games/uno/create";
+import { UnoDemo } from "@/components/landing/uno-demo";
 import { JsonLd } from "@/components/site/json-ld";
 import { SiteFooter } from "@/components/site/site-footer";
 import { SiteHeader } from "@/components/site/site-header";
@@ -64,60 +64,6 @@ function faqJsonLd() {
   };
 }
 
-const pick = (color: UnoCard["color"], value: UnoCard["value"]) =>
-  UNO_CARDS.find((c) => c.color === color && c.value === value)!;
-
-const HAND: UnoCard[] = [
-  pick("red", "7"),
-  pick("yellow", "skip"),
-  pick("green", "reverse"),
-  pick("blue", "draw2"),
-  pick("wild", "wild"),
-  pick("wild", "wild4"),
-];
-
-/** A static table: two opponents, the piles and a fanned hand. */
-function TableArt() {
-  return (
-    <div className="table-felt relative mx-auto aspect-[10/8] w-full max-w-md overflow-hidden rounded-[44%/40%] shadow-soft-lg ring-4 ring-[#1d3f36]">
-      {[
-        { left: "22%", top: "20%" },
-        { left: "78%", top: "20%" },
-      ].map((pos, i) => (
-        <div
-          key={i}
-          className="absolute flex -translate-x-1/2 -translate-y-1/2 items-end"
-          style={pos}
-          aria-hidden
-        >
-          {Array.from({ length: 5 }, (_, c) => (
-            <UnoCardBack key={c} className="-ml-4 h-12 w-auto first:ml-0" />
-          ))}
-        </div>
-      ))}
-      <div className="absolute top-[45%] left-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-5">
-        <UnoCardBack className="h-24 w-auto drop-shadow-md" />
-        <div className="rounded-[9px]" style={{ boxShadow: "0 0 0 3px #3b74f0, 0 0 22px #3b74f0" }}>
-          <UnoCardFace card={pick("blue", "5")} className="h-28 w-auto" />
-        </div>
-      </div>
-      <div className="absolute bottom-[4%] left-1/2 flex -translate-x-1/2">
-        {HAND.map((card, i) => (
-          <div
-            key={card.id}
-            className="-ml-5 first:ml-0"
-            style={{
-              transform: `rotate(${(i - (HAND.length - 1) / 2) * 7}deg) translateY(${Math.abs(i - (HAND.length - 1) / 2) * 4}px)`,
-            }}
-          >
-            <UnoCardFace card={card} className="h-20 w-auto drop-shadow-md sm:h-24" />
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 export default function UnoPage() {
   return (
     <div className="flex min-h-dvh flex-col">
@@ -143,7 +89,7 @@ export default function UnoPage() {
               <UnoCreate />
             </div>
           </div>
-          <TableArt />
+          <UnoDemo />
         </section>
 
         <div className="mx-auto w-full max-w-3xl px-4 pb-16">
