@@ -386,6 +386,14 @@ describe("Room viewers and host actions", () => {
     expect(room.stateFor(hostId).stats[pid(2)]).toMatchObject({ merges: 0 });
     expect(spy.events("puzzle:reset")).toHaveLength(1);
   });
+
+  it("the host moves everyone on to a new room", () => {
+    expect(room.moveTo(pid(2), "next1234")).toEqual({ ok: false, error: "not_host" });
+    expect(room.moveTo(hostId, "next1234")).toEqual({ ok: true });
+    expect(spy.events("room:next").map((s) => s.args)).toEqual([["next1234"]]);
+    // Someone opening the old link later is sent on too.
+    expect(room.stateFor(pid(2)).room.next).toBe("next1234");
+  });
 });
 
 describe("Room host hand-off", () => {

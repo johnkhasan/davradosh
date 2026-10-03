@@ -1,5 +1,6 @@
 "use client";
 
+import { PIECE_COUNT_OPTIONS } from "@puzzle/shared";
 import { ArrowLeft, ArrowRight, Loader2, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -14,6 +15,12 @@ import { SettingsStep, type PuzzleSettings } from "./settings-step";
 
 const STEPS = ["Rasm", "Sozlamalar", "Boshlash"] as const;
 
+/** A finished room whose players follow this new puzzle (`/create?from=<roomId>`). */
+function readFromRoom(): string | null {
+  const from = new URLSearchParams(window.location.search).get("from");
+  return from && /^[\w-]{1,64}$/.test(from) ? from : null;
+}
+
 export function CreateWizard() {
   const router = useRouter();
   const [step, setStep] = useState(0);
@@ -23,6 +30,26 @@ export function CreateWizard() {
   const [askName, setAskName] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [fromRoom] = useState(readFromRoom);
+
+  // A next round starts with the last round's settings.
+  useEffect(() => {
+    if (!fromRoom) return;
+    let cancelled = false;
+    api
+      .getRoom(fromRoom)
+      .then((room) => {
+        if (cancelled) return;
+        const pieces = PIECE_COUNT_OPTIONS.reduce((best, n) =>
+          Math.abs(n - room.pieces) < Math.abs(best - room.pieces) ? n : best,
+        );
+        setSettings({ pieces, maxPlayers: room.maxPlayers });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [fromRoom]);
 
   const preview = usePreview(picked);
 
@@ -45,6 +72,7 @@ export function CreateWizard() {
         imageId,
         pieces: settings.pieces,
         maxPlayers: settings.maxPlayers,
+        fromRoomId: fromRoom ?? undefined,
       });
       router.push(`/room/${id}`);
     } catch {
@@ -63,9 +91,18 @@ export function CreateWizard() {
   return (
     <main className="mx-auto w-full max-w-4xl px-4 py-6 sm:py-10">
       <div className="mb-6 flex items-center justify-between gap-4">
-        <Link href="/" className="font-display text-lg font-bold">
-          🧩 Puzzle
-        </Link>
+        {fromRoom ? (
+          <Link
+            href={`/room/${fromRoom}`}
+            className="flex items-center gap-1.5 text-sm font-medium text-muted hover:text-foreground"
+          >
+            <ArrowLeft className="size-4" aria-hidden /> Xonaga qaytish
+          </Link>
+        ) : (
+          <Link href="/" className="font-display text-lg font-bold">
+            🧩 Puzzle
+          </Link>
+        )}
         <ol className="flex items-center gap-2 text-sm" aria-label="Qadamlar">
           {STEPS.map((label, index) => (
             <li key={label} className="flex items-center gap-2">
@@ -122,8 +159,9 @@ export function CreateWizard() {
                 <b>{settings.pieces}</b> bo&apos;lak · <b>{settings.maxPlayers}</b> kishigacha
               </p>
               <p className="text-muted">
-                Puzzle yaratilgach, havolani do&apos;stlaringizga yuboring: ular darhol
-                qo&apos;shilishadi. Puzzle 7 kun saqlanadi.
+                {fromRoom
+                  ? "Xonadagi hamma yangi puzzle'ga avtomatik o'tadi. Puzzle 7 kun saqlanadi."
+                  : "Puzzle yaratilgach, havolani do'stlaringizga yuboring: ular darhol qo'shilishadi. Puzzle 7 kun saqlanadi."}
               </p>
               {identity && (
                 <p className="text-sm text-muted">
@@ -177,7 +215,7 @@ export function CreateWizard() {
               ) : (
                 <Sparkles className="size-4" aria-hidden />
               )}
-              {busy ?? "Puzzle yaratish"}
+              {busy ?? (fromRoom ? "Yangi o'yinni boshlash" : "Puzzle yaratish")}
             </button>
           )}
         </div>

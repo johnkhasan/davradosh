@@ -9,6 +9,7 @@ import {
 import {
   Check,
   Eye,
+  ImagePlus,
   RotateCcw,
   Trophy,
   X,
@@ -27,6 +28,7 @@ import {
   WifiOff,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { IdentityDialog } from "@/components/identity-dialog";
 import { PuzzleLoader } from "@/components/puzzle-loader";
@@ -79,7 +81,7 @@ export function MultiplayerRoom({ roomId }: { roomId: string }) {
   }
   return (
     <RoomScreen
-      key={identity.clientId + identity.name}
+      key={roomId + identity.clientId + identity.name}
       roomId={roomId}
       identity={identity}
       watchOnly={watchOnly}
@@ -205,7 +207,16 @@ function RoomScreen({
   const seatedPlayers = players.filter((p) => p.role === "player");
   const viewerCount = players.length - seatedPlayers.length;
 
+  // The host started a new puzzle: follow them into its room.
+  const next = room?.next;
+  const router = useRouter();
+  useEffect(() => {
+    if (next) router.replace(`/room/${next}`);
+  }, [next, router]);
+
   if (status === "error" && error) return <RoomErrorScreen error={error} />;
+  if (room?.next)
+    return <PuzzleLoader label="Yangi o'yinga o'tilmoqda" tone="onTable" className="table-felt" />;
 
   return (
     <div className="fixed inset-0 flex flex-col overflow-hidden bg-background">
@@ -531,13 +542,23 @@ function RoomScreen({
               <Trophy className="size-4" aria-hidden /> Natija
             </button>
             {controller.isHost ? (
-              <button
-                type="button"
-                onClick={() => void controller.restart()}
-                className="flex items-center gap-1.5 rounded-control bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-soft-md transition-transform hover:-translate-y-0.5"
-              >
-                <RotateCcw className="size-4" aria-hidden /> Yangi o&apos;yin
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => void controller.restart()}
+                  aria-label="Shu rasmni qaytadan"
+                  title="Shu rasmni qaytadan"
+                  className="flex items-center gap-1.5 rounded-control border border-border bg-surface/95 px-3 py-2 text-sm font-medium shadow-soft-md backdrop-blur hover:bg-surface-muted"
+                >
+                  <RotateCcw className="size-4" aria-hidden />
+                </button>
+                <Link
+                  href={`/create?from=${roomId}`}
+                  className="flex items-center gap-1.5 rounded-control bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-soft-md transition-transform hover:-translate-y-0.5"
+                >
+                  <ImagePlus className="size-4" aria-hidden /> Yangi o&apos;yin
+                </Link>
+              </>
             ) : (
               <Link
                 href="/create"
@@ -561,6 +582,7 @@ function RoomScreen({
             pieces={progress.total}
             onClose={() => setDismissedRound(room?.startedAt ?? null)}
             onRestart={controller.isHost ? () => void controller.restart() : undefined}
+            nextHref={controller.isHost ? `/create?from=${roomId}` : undefined}
           />
         )}
       </div>
@@ -735,6 +757,7 @@ function CompletedDialog({
   pieces,
   onClose,
   onRestart,
+  nextHref,
 }: {
   durationMs: number;
   stats: Record<string, PlayerStatsDTO>;
@@ -746,6 +769,8 @@ function CompletedDialog({
   onClose: () => void;
   /** Host only: play the same picture again. */
   onRestart?: () => void;
+  /** Host only: pick a new picture and settings; everyone here follows. */
+  nextHref?: string;
 }) {
   // Everyone who played this round, including people who have left since.
   const ids = new Set([
@@ -814,30 +839,53 @@ function CompletedDialog({
             </li>
           ))}
         </ul>
-        <div className="mt-6 flex gap-2">
-          <button
-            onClick={onClose}
-            className="flex-1 rounded-control border border-border px-4 py-2.5 font-medium hover:bg-surface-muted"
-          >
-            Rasmni ko&apos;rish
-          </button>
-          {onRestart ? (
+        {nextHref ? (
+          <div className="mt-6 grid grid-cols-2 gap-2">
+            <Link
+              href={nextHref}
+              className="col-span-2 flex items-center justify-center gap-2 rounded-control bg-primary px-4 py-2.5 font-medium text-primary-foreground shadow-soft-sm"
+            >
+              <ImagePlus className="size-4" aria-hidden /> Yangi rasm bilan o&apos;ynash
+            </Link>
             <button
               type="button"
-              onClick={onRestart}
-              className="flex-1 rounded-control bg-primary px-4 py-2.5 font-medium text-primary-foreground"
+              onClick={onClose}
+              className="rounded-control border border-border px-3 py-2.5 text-sm font-medium hover:bg-surface-muted"
             >
-              Yana o&apos;ynash
+              Rasmni ko&apos;rish
             </button>
-          ) : (
-            <Link
-              href="/"
-              className="flex-1 rounded-control bg-primary px-4 py-2.5 font-medium text-primary-foreground"
-            >
-              Yangi puzzle
-            </Link>
-          )}
-        </div>
+            {onRestart && (
+              <button
+                type="button"
+                onClick={onRestart}
+                className="flex items-center justify-center gap-1.5 rounded-control border border-border px-3 py-2.5 text-sm font-medium hover:bg-surface-muted"
+              >
+                <RotateCcw className="size-4" aria-hidden /> Shu rasmni qayta
+              </button>
+            )}
+          </div>
+        ) : (
+          <>
+            <p className="mt-5 text-sm text-muted">
+              Xona egasi yangi o&apos;yin boshlasa, siz ham avtomatik o&apos;tasiz.
+            </p>
+            <div className="mt-3 flex gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex-1 rounded-control border border-border px-4 py-2.5 font-medium hover:bg-surface-muted"
+              >
+                Rasmni ko&apos;rish
+              </button>
+              <Link
+                href="/create"
+                className="flex-1 rounded-control bg-primary px-4 py-2.5 font-medium text-primary-foreground"
+              >
+                O&apos;z puzzle&apos;im
+              </Link>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

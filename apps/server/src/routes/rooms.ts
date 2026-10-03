@@ -9,6 +9,8 @@ export async function roomRoutes(app: FastifyInstance, opts: { manager: RoomMana
       return reply.code(400).send({ error: "invalid", issues: parsed.error.issues });
     const room = await opts.manager.create(parsed.data);
     if (!room) return reply.code(404).send({ error: "image_not_found" });
+    const { fromRoomId, clientId } = parsed.data;
+    if (fromRoomId) opts.manager.moveOn(fromRoomId, clientId, room.id);
     return reply.code(201).send({ id: room.id, code: room.code });
   });
 

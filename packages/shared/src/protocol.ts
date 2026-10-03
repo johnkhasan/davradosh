@@ -98,6 +98,8 @@ export const CreateRoomSchema = z.object({
     .refine((n) => (PIECE_COUNT_OPTIONS as readonly number[]).includes(n)),
   maxPlayers: z.number().int().min(2).max(MAX_PLAYERS_PER_ROOM).default(MAX_PLAYERS_PER_ROOM),
   rotation: z.boolean().default(false),
+  /** The finished room this one follows: its host moves everyone there. */
+  fromRoomId: z.string().min(1).max(64).optional(),
 });
 
 export type JoinPayload = z.infer<typeof JoinPayloadSchema>;
@@ -164,6 +166,8 @@ export interface RoomInfoDTO {
   /** When the current round started (reset by the host's restart). */
   startedAt: number;
   completedAt: number | null;
+  /** The room the host started next; everyone here moves on to it. */
+  next?: string | null;
 }
 
 export interface PlayerStatsDTO {
@@ -232,6 +236,8 @@ export interface ServerToClientEvents {
   kicked: (reason: KickReason) => void;
   /** The host restarted the puzzle: clients reload the room state. */
   "puzzle:reset": () => void;
+  /** The host started a new puzzle in another room: clients follow them there. */
+  "room:next": (roomId: string) => void;
 }
 
 export interface ClientToServerEvents {

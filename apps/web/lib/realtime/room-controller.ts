@@ -171,6 +171,10 @@ export class RoomController {
       this.update({ status: "error", error: reason === "host" ? "removed" : "kicked" });
       socket.disconnect();
     });
+    socket.on("room:next", (next) => {
+      const room = this.snapshot.room;
+      if (room) this.update({ room: { ...room, next } });
+    });
     socket.on("puzzle:reset", () => {
       this.update({ completed: null });
       this.notify("Host puzzle'ni qaytadan boshladi");

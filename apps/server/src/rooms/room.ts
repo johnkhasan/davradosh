@@ -348,6 +348,15 @@ export class Room {
     return { ok: true };
   }
 
+  /** The host started a new puzzle in room `nextId`: everyone here follows. */
+  moveTo(hostId: string, nextId: string): ActionAck {
+    if (!this.isHostPlayer(hostId)) return { ok: false, error: "not_host" };
+    if (nextId === this.id) return { ok: false, error: "invalid" };
+    this.info.next = nextId;
+    this.emit.all("room:next", nextId);
+    return { ok: true };
+  }
+
   private uniqueName(requested: string, playerId: string): string {
     const taken = new Set(
       [...this.players.values()]

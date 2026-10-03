@@ -2,7 +2,7 @@ import { randomInt } from "node:crypto";
 import { gridForPieceCount, PuzzleState, ROOM_TTL_MS, type CreateRoomSchema } from "@puzzle/shared";
 import type { FastifyBaseLogger } from "fastify";
 import type { z } from "zod";
-import { randomCode, randomId } from "../lib/ids";
+import { publicPlayerId, randomCode, randomId } from "../lib/ids";
 import { RoomCodeTakenError, type RoomRepository } from "./repository";
 import { Room, type RoomEmitter } from "./room";
 
@@ -90,6 +90,12 @@ export class RoomManager {
     }
     this.opts.logger.warn("no free room code, creating a room without one");
     return this.opts.repository.createRoom({ ...room, code: null });
+  }
+
+  /** Sends the players of a live room on to the host's next room. */
+  moveOn(fromId: string, clientId: string, nextId: string): boolean {
+    const room = this.rooms.get(fromId);
+    return room?.moveTo(publicPlayerId(clientId), nextId).ok ?? false;
   }
 
   /** Room id for a 4-digit join code. */
