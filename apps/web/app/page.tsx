@@ -21,7 +21,7 @@ const STEPS = [
   {
     icon: Gamepad2,
     title: "O'yinni tanlang",
-    text: "Puzzle yoki mafia: xona yoki stol bir bosishda yaratiladi.",
+    text: "Puzzle, mafia, shaxmat, Uno… Xona yoki stol bir bosishda yaratiladi.",
   },
   {
     icon: Link2,
@@ -31,7 +31,7 @@ const STEPS = [
   {
     icon: MessageCircle,
     title: "Birga o'ynang",
-    text: "Hamma real vaqtda bir xil narsani ko'radi, mafiada esa ovozli chatda gaplashasiz.",
+    text: "Hamma real vaqtda bir xil narsani ko'radi, stolda chat bor, mafiada esa ovozli chatda gaplashasiz.",
   },
 ] as const;
 
@@ -51,6 +51,17 @@ const SHOWCASE = {
     secondary: { href: "/mafia/qoidalar", label: "Qoidalar" },
     accent: "from-[#e2725b]/30 via-[#6C5CE7]/20 to-[#0b0d24]/30",
   },
+} as const;
+
+const FEATURED = GAMES.filter((game) => game.featured);
+const TABLE = GAMES.filter((game) => !game.featured);
+
+/** Card art backgrounds of the table games. */
+const TILE = {
+  chess: "from-[#f0d9b5] to-[#b58863]",
+  checkers: "from-[#2f5d50] to-[#173a31]",
+  uno: "from-[#e5484d] via-[#ffb020] to-[#2f9e44]",
+  battleship: "from-[#4dabf7] to-[#1c4e80]",
 } as const;
 
 export default function Home() {
@@ -84,8 +95,8 @@ export default function Home() {
         </section>
 
         <section aria-label="O'yinlar" className="mx-auto w-full max-w-6xl space-y-20 px-4 pb-20">
-          {GAMES.map((game, i) => {
-            const show = SHOWCASE[game.slug];
+          {FEATURED.map((game, i) => {
+            const show = SHOWCASE[game.slug as keyof typeof SHOWCASE];
             return (
               <article
                 key={game.slug}
@@ -103,6 +114,22 @@ export default function Home() {
                   </h2>
                   <p className="mt-4 text-lg text-muted">{game.tagline}</p>
                   <p className="mt-2 text-muted">{game.description}</p>
+                  {game.slug === "puzzle" && (
+                    <p className="mt-4 flex flex-wrap gap-2 text-sm">
+                      <Link
+                        href="/puzzle/kunlik"
+                        className="rounded-full bg-primary-soft px-3 py-1 font-medium text-primary"
+                      >
+                        📅 Kunlik puzzle
+                      </Link>
+                      <Link
+                        href="/puzzle#poyga"
+                        className="rounded-full bg-primary-soft px-3 py-1 font-medium text-primary"
+                      >
+                        🏁 Puzzle poyga
+                      </Link>
+                    </p>
+                  )}
                   <div className="mt-6 flex flex-col gap-3 sm:flex-row">
                     <Link
                       href={show.primary.href}
@@ -133,6 +160,43 @@ export default function Home() {
               </article>
             );
           })}
+
+          <div id="stol-oyinlari" className="scroll-mt-8">
+            <h2 className="font-display text-3xl font-extrabold tracking-tight sm:text-4xl">
+              Stol o&apos;yinlari
+            </h2>
+            <p className="mt-2 max-w-2xl text-muted">
+              Do&apos;stingizga havola yuboring va bir zumda o&apos;ynang: navbat, chat va revansh
+              hammasi tayyor.
+            </p>
+            <ul className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {TABLE.map((game) => (
+                <li key={game.slug} id={game.slug} className="scroll-mt-8">
+                  <Link
+                    href={game.path}
+                    className="group flex h-full flex-col rounded-card border border-border bg-surface p-5 shadow-soft-sm transition-transform hover:-translate-y-1 hover:shadow-soft-md focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+                  >
+                    <span
+                      aria-hidden
+                      className={`flex aspect-[4/3] items-center justify-center rounded-control bg-gradient-to-br text-6xl ${TILE[game.slug as keyof typeof TILE]}`}
+                    >
+                      {game.emoji}
+                    </span>
+                    <span className="mt-4 text-xs font-semibold tracking-wide text-primary uppercase">
+                      {game.players} · bepul
+                    </span>
+                    <span className="mt-1 font-display text-2xl font-bold group-hover:text-primary">
+                      {game.name}
+                    </span>
+                    <span className="mt-1 text-sm text-muted">{game.tagline}</span>
+                    <span className="mt-auto pt-4 text-sm font-semibold text-primary">
+                      O&apos;ynash →
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
 
           <div className="rounded-card border border-dashed border-border p-6 text-center text-muted">
             Yangi o&apos;yinlar tayyorlanmoqda: Davradosh&apos;da tez orada boshqa o&apos;yinlar ham

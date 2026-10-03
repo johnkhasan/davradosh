@@ -3,6 +3,9 @@ import path from "node:path";
 import rateLimit from "@fastify/rate-limit";
 import fastifyStatic from "@fastify/static";
 import { buildApp } from "./app";
+import { MemoryDailyRepository, type DailyRepository } from "./daily/repository";
+import { dailyRoutes } from "./daily/routes";
+import { DailyService } from "./daily/service";
 import type { Env } from "./env";
 import type { MafiaGameOptions } from "./mafia/game";
 import { MafiaRoomManager } from "./mafia/mafia-manager";
@@ -29,6 +32,16 @@ import { roomRoutes } from "./routes/rooms";
 import { voiceRoutes } from "./routes/voice";
 import { VoiceService } from "./rtc/voice";
 import { createSocketServer } from "./socket";
+import { createPrepareOptions } from "./table/prepare";
+import { MemoryTableRepository, type TableRepository } from "./table/repository";
+import { tableRoutes } from "./table/routes";
+import {
+  createTableEmitter,
+  registerTableHandlers,
+  type TableNamespace,
+} from "./table/socket-handlers";
+import { TableRoomManager } from "./table/table-manager";
+import type { TableRoomOptions } from "./table/table-room";
 
 export interface GameServerDeps {
   env: Pick<
@@ -48,6 +61,12 @@ export interface GameServerDeps {
   repository: RoomRepository;
   /** Mafia rooms; in memory when omitted. */
   mafiaRepository?: MafiaRepository;
+  /** Table game rooms (chess, uno, ...); in memory when omitted. */
+  tableRepository?: TableRepository;
+  /** Daily puzzle times; in memory when omitted. */
+  dailyRepository?: DailyRepository;
+  /** Shorter table timers in tests. */
+  table?: { room?: Omit<TableRoomOptions, "now">; tickMs?: number };
   /** Shorter mafia timers in tests. */
   mafia?: {
     game?: MafiaGameOptions;
@@ -65,6 +84,9 @@ export async function createGameServer({
   repository,
   mafiaRepository = new MemoryMafiaRepository(),
   mafia: mafiaOptions,
+  tableRepository = new MemoryTableRepository(),
+  table: tableOptions,
+  dailyRepository = new MemoryDailyRepository(),
   checkDb,
   fetch,
 }: GameServerDeps) {
@@ -135,14 +157,37 @@ export async function createGameServer({
   await app.register(mafiaRoutes, { manager: mafia, voice: mafiaVoice });
   registerMafiaHandlers(mafiaNsp, mafia, app.log);
 
+  // Table games (chess, checkers, uno, battleship, puzzle race): one more namespace.
+  const tableNsp = io.of("/table") as unknown as TableNamespace;
+  const table = new TableRoomManager({
+    repository: tableRepository,
+    createEmitter: () => createTableEmitter(tableNsp),
+    logger: app.log,
+    room: tableOptions?.room,
+    tickMs: tableOptions?.tickMs,
+  });
+  const prepareOptions = createPrepareOptions(repository);
+  await app.register(tableRoutes, { manager: table, prepareOptions });
+  registerTableHandlers(tableNsp, table, app.log);
+
+  // Daily puzzle: always from Lorem Picsum (no key needed, a stable list), so a restart picks
+  // the same picture for the same day.
+  const daily = new DailyService({
+    gallery: new GalleryService({ store, repository, fetch }),
+    repository: dailyRepository,
+  });
+  await app.register(dailyRoutes, { daily });
+
   return {
     app,
     io,
     manager,
     mafia,
+    table,
     async close() {
       await manager.stop();
       await mafia.stop();
+      await table.stop();
       io.close();
       await app.close();
     },

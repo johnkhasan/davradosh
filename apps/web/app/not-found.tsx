@@ -78,23 +78,24 @@ export default function NotFound() {
           Do&apos;stingiz yuborgan havola bo&apos;lsa, o&apos;yin tugagan yoki xona muddati
           o&apos;tgan bo&apos;lishi mumkin.
         </p>
-        <div className="mt-8 flex w-full flex-col justify-center gap-3 sm:w-auto sm:flex-row">
-          <Link
-            href="/"
-            className="rounded-control bg-primary px-6 py-3 text-lg font-semibold text-primary-foreground shadow-soft-lg transition-transform hover:-translate-y-0.5"
-          >
-            Bosh sahifaga
-          </Link>
+        <Link
+          href="/"
+          className="mt-8 w-full rounded-control bg-primary px-6 py-3 text-lg font-semibold text-primary-foreground shadow-soft-lg transition-transform hover:-translate-y-0.5 sm:w-auto"
+        >
+          Bosh sahifaga
+        </Link>
+        <ul className="mt-5 flex max-w-xl flex-wrap justify-center gap-2" aria-label="O'yinlar">
           {GAMES.map((game) => (
-            <Link
-              key={game.slug}
-              href={game.path}
-              className="rounded-control border border-border bg-surface px-6 py-3 text-lg font-medium shadow-soft-sm transition-colors hover:bg-surface-muted"
-            >
-              {game.emoji} {game.name}
-            </Link>
+            <li key={game.slug}>
+              <Link
+                href={game.path}
+                className="inline-flex rounded-full border border-border bg-surface px-4 py-2 font-medium shadow-soft-sm transition-colors hover:bg-surface-muted"
+              >
+                {game.emoji} {game.name}
+              </Link>
+            </li>
           ))}
-        </div>
+        </ul>
       </main>
       <SiteFooter />
     </div>

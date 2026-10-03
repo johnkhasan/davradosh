@@ -87,3 +87,52 @@ model MafiaRoom {
 
   @@index([expiresAt])
 }
+
+enum TableStatus {
+  LOBBY
+  PLAYING
+}
+
+/// A room of one of the turn-based table games (chess, checkers, uno, battleship, puzzle race).
+model TableRoom {
+  /// nanoid(8), used in the share link: /{game path}/{id}
+  id        String      @id
+  /// "chess" | "checkers" | "uno" | "battleship" | "race"
+  kind      String
+  /// Public player id of the current host
+  hostId    String
+  /// Game options chosen at creation
+  options   Json?
+  status    TableStatus @default(LOBBY)
+  /// Room members (players and spectators) without socket data
+  members   Json        @default("[]")
+  /// The game in progress or just finished, with hidden information: server only
+  game      Json?
+  /// Games started so far; rotates seats between rematches
+  round     Int         @default(0)
+  /// Public player ids the host kicked with a ban
+  banned    String[]    @default([])
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  expiresAt DateTime
+
+  @@index([expiresAt])
+}
+
+/// Best time of one player on one day's daily puzzle (/puzzle/kunlik).
+model DailyResult {
+  id        Int      @id @default(autoincrement())
+  /// Tashkent date of the puzzle, "YYYY-MM-DD"
+  day       String
+  /// Public player id
+  playerId  String
+  name      String
+  color     String
+  avatar    String
+  /// Solving time in milliseconds
+  ms        Int
+  createdAt DateTime @default(now())
+
+  @@unique([day, playerId])
+  @@index([day, ms])
+}

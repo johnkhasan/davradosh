@@ -9,7 +9,7 @@ export const SITE_NAME = "Davradosh";
 export const SITE_TITLE = "Davradosh — do'stlar bilan onlayn o'yinlar";
 
 export const SITE_DESCRIPTION =
-  "Do'stlar davrasida o'ynaladigan bepul onlayn o'yinlar: pazl (puzzle) va sport mafiasi. Havolani Telegram'da ulashing, ovozli chatda gaplashing, ro'yxatdan o'tmasdan o'ynang.";
+  "Do'stlar bilan bepul onlayn o'yinlar: puzzle, sport mafiasi, shaxmat, shashka, Uno va dengiz jangi. Havolani Telegram'da ulashing va ro'yxatdan o'tmasdan o'ynang.";
 
 /**
  * Shared Open Graph fields. No title/description here: Next fills them from each page's own
@@ -32,10 +32,18 @@ export const SITE_KEYWORDS = [
   "puzzle o'yini",
   "mafia onlayn",
   "sport mafiasi",
+  "shaxmat onlayn",
+  "shashka onlayn",
+  "uno onlayn",
+  "dengiz jangi",
+  "kunlik puzzle",
   "ovozli chat o'yin",
   "онлайн игры с друзьями",
   "мафия онлайн",
   "пазлы онлайн",
+  "шахматы онлайн",
+  "шашки онлайн",
+  "морской бой онлайн",
 ];
 
 // ------------------------------------------------------------------ games
@@ -54,7 +62,9 @@ export const RULES_DESCRIPTION =
   "Sport mafiasining rasmiy qoidalari o'zbek tilida: Don, Sherif, mafiya va tinch aholi, tanishuv tuni, nomzod ko'rsatish, ovoz berish, eng yaxshi yurish, folllar va g'alaba shartlari.";
 
 export interface GameInfo {
-  slug: "puzzle" | "mafia";
+  slug: "puzzle" | "mafia" | "chess" | "checkers" | "uno" | "battleship";
+  /** Featured games get a big live demo on the home page; the others a card. */
+  featured: boolean;
   name: string;
   path: string;
   emoji: string;
@@ -69,6 +79,7 @@ export interface GameInfo {
 export const GAMES: GameInfo[] = [
   {
     slug: "puzzle",
+    featured: true,
     name: "Puzzle",
     path: "/puzzle",
     emoji: "🧩",
@@ -81,6 +92,7 @@ export const GAMES: GameInfo[] = [
   },
   {
     slug: "mafia",
+    featured: true,
     name: "Mafia",
     path: "/mafia",
     emoji: "🕵️",
@@ -91,17 +103,73 @@ export const GAMES: GameInfo[] = [
     genre: ["Party game", "Social deduction", "Mafia"],
     description: MAFIA_DESCRIPTION,
   },
+  {
+    slug: "chess",
+    featured: false,
+    name: "Shaxmat",
+    path: "/shaxmat",
+    emoji: "♟️",
+    tagline: "Do'stingiz bilan shaxmat: soat, durang taklifi va to'liq qoidalar.",
+    players: "2 kishi",
+    minPlayers: 2,
+    maxPlayers: 2,
+    genre: ["Chess", "Board game", "Strategy"],
+    description:
+      "Bepul onlayn shaxmat: havolani do'stingizga yuboring va soat bilan yoki soatsiz o'ynang. Rokirovka, o'tib olish, mat va pat — barcha qoidalar.",
+  },
+  {
+    slug: "checkers",
+    featured: false,
+    name: "Shashka",
+    path: "/shashka",
+    emoji: "⚫",
+    tagline: "Rus shashkasi: majburiy urish, uchar damka, ketma-ket urishlar.",
+    players: "2 kishi",
+    minPlayers: 2,
+    maxPlayers: 2,
+    genre: ["Checkers", "Draughts", "Board game"],
+    description:
+      "Bepul onlayn shashka (rus shashkasi): do'stingiz bilan havola orqali o'ynang. Majburiy urish, damka va ketma-ket urish qoidalari bilan.",
+  },
+  {
+    slug: "uno",
+    featured: false,
+    name: "Uno",
+    path: "/uno",
+    emoji: "🃏",
+    tagline: "Rangli karta o'yini: +2, +4, yo'nalish almashtirish va «Uno!» deyish.",
+    players: "2–8 kishi",
+    minPlayers: 2,
+    maxPlayers: 8,
+    genre: ["Card game", "Party game"],
+    description:
+      "Uno uslubidagi bepul onlayn karta o'yini: 2–8 kishi, rangli kartalar, +2 va +4, «Uno!» deyishni unutmang. Havolani do'stlaringizga yuboring.",
+  },
+  {
+    slug: "battleship",
+    featured: false,
+    name: "Dengiz jangi",
+    path: "/dengiz-jangi",
+    emoji: "🚢",
+    tagline: "Kemalarni joylang va raqib flotini birinchi bo'lib cho'ktiring.",
+    players: "2 kishi",
+    minPlayers: 2,
+    maxPlayers: 2,
+    genre: ["Battleship", "Strategy", "Board game"],
+    description:
+      "Bepul onlayn dengiz jangi: 10×10 maydon, klassik flot va qoidalar. Kemalaringizni joylang, do'stingizga havola yuboring va o'q uzing.",
+  },
 ];
 
 // ------------------------------------------------------------------ FAQ
 
-type Faq = ReadonlyArray<{ question: string; answer: string }>;
+export type Faq = ReadonlyArray<{ question: string; answer: string }>;
 
 export const HOME_FAQ: Faq = [
   {
     question: "Davradosh nima?",
     answer:
-      "Davradosh — do'stlar, oila yoki hamkasblar bilan birga o'ynaladigan onlayn o'yinlar sayti. Hozircha pazl (puzzle) va sport mafiasi bor, yangi o'yinlar qo'shilib boradi.",
+      "Davradosh — do'stlar, oila yoki hamkasblar bilan birga o'ynaladigan onlayn o'yinlar sayti: puzzle, sport mafiasi, shaxmat, shashka, Uno va dengiz jangi. Yangi o'yinlar qo'shilib boradi.",
   },
   {
     question: "O'yinlar bepulmi?",
@@ -273,6 +341,19 @@ export const homeJsonLd = () =>
     },
     faqPage(HOME_FAQ),
   );
+
+/** VideoGame + FAQ + breadcrumbs for a game page. */
+export const gameJsonLd = (slug: GameInfo["slug"], faq: Faq) => {
+  const game = gameInfo(slug);
+  return graph(
+    videoGame(game),
+    faqPage(faq),
+    breadcrumbs([
+      [SITE_NAME, "/"],
+      [game.name, game.path],
+    ]),
+  );
+};
 
 export const puzzleJsonLd = () =>
   graph(

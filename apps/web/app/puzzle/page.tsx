@@ -1,5 +1,7 @@
 import { MAX_PLAYERS_PER_ROOM } from "@puzzle/shared";
 import {
+  CalendarDays,
+  Flag,
   ImagePlus,
   Link2,
   MousePointer2,
@@ -13,6 +15,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { GameCursor } from "@/components/landing/game-cursor";
 import { HeroDemo } from "@/components/landing/hero-demo";
+import { RaceCreate } from "@/components/puzzle-modes/race-create";
 import { JsonLd } from "@/components/site/json-ld";
 import { SiteFooter } from "@/components/site/site-footer";
 import { SiteHeader } from "@/components/site/site-header";
@@ -87,6 +90,12 @@ export default function PuzzlePage() {
       <JsonLd data={puzzleJsonLd()} />
       <GameCursor />
       <SiteHeader current="puzzle">
+        <Link
+          href="/puzzle/kunlik"
+          className="hidden rounded-control px-3 py-2 font-medium text-muted hover:text-foreground md:inline-flex"
+        >
+          Kunlik puzzle
+        </Link>
         <Link
           href="/play"
           className="hidden rounded-control px-3 py-2 font-medium text-muted hover:text-foreground md:inline-flex"
@@ -197,6 +206,50 @@ export default function PuzzlePage() {
                 </li>
               ))}
             </ol>
+          </div>
+        </section>
+
+        <section
+          aria-labelledby="modes-title"
+          className="mx-auto w-full max-w-6xl scroll-mt-6 px-4 pt-16"
+        >
+          <h2 id="modes-title" className="text-center font-display text-3xl font-bold sm:text-4xl">
+            Yana ikki rejim
+          </h2>
+          <div className="mt-10 grid gap-5 md:grid-cols-2">
+            <div
+              id="poyga"
+              className="flex scroll-mt-6 flex-col rounded-card border border-border bg-surface p-6 shadow-soft-sm"
+            >
+              <Flag
+                className="size-9 rounded-control bg-primary-soft p-2 text-primary"
+                aria-hidden
+              />
+              <h3 className="mt-4 font-display text-2xl font-bold">Poyga rejimi</h3>
+              <p className="mt-2 flex-1 text-muted">
+                2–8 kishi bitta rasmni bir xil bo&apos;laklar bilan bir vaqtda, har kim o&apos;z
+                stolida yig&apos;adi. Kim qancha yig&apos;gani jonli ko&apos;rinadi, birinchi
+                tugatgan yutadi.
+              </p>
+              <RaceCreate className="mt-5 w-full sm:w-auto sm:self-start" />
+            </div>
+            <div className="flex flex-col rounded-card border border-border bg-surface p-6 shadow-soft-sm">
+              <CalendarDays
+                className="size-9 rounded-control bg-primary-soft p-2 text-primary"
+                aria-hidden
+              />
+              <h3 className="mt-4 font-display text-2xl font-bold">Kunlik puzzle</h3>
+              <p className="mt-2 flex-1 text-muted">
+                Har kuni hamma uchun bitta yangi rasm. Yig&apos;ing, vaqtingizni solishtiring va
+                kunlik reytingga chiqing.
+              </p>
+              <Link
+                href="/puzzle/kunlik"
+                className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-control border border-border bg-surface px-7 py-3.5 text-lg font-semibold shadow-soft-sm transition-colors hover:bg-surface-muted sm:w-auto sm:self-start"
+              >
+                <CalendarDays className="size-5" aria-hidden /> Bugungi puzzle
+              </Link>
+            </div>
           </div>
         </section>
 

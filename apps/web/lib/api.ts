@@ -70,3 +70,71 @@ export const api = {
     return (await res.json()) as ImageDTO;
   },
 };
+
+// ---------------------------------------------------------------- daily puzzle
+
+export interface DailyPuzzleDTO {
+  /** Tashkent date, "YYYY-MM-DD". */
+  day: string;
+  image: ImageDTO;
+  seed: number;
+  pieces: number;
+  /** Until the next puzzle, measured on the server. */
+  nextInMs: number;
+}
+
+export interface DailyLeaderRow {
+  rank: number;
+  /** Public player id. */
+  id: string;
+  name: string;
+  color: string;
+  avatar: string;
+  ms: number;
+  you: boolean;
+}
+
+export interface DailyLeaderboardDTO {
+  day: string;
+  total: number;
+  top: DailyLeaderRow[];
+  you: DailyLeaderRow | null;
+}
+
+export interface DailySubmitDTO {
+  ok: true;
+  day: string;
+  /** Best time of the day (may be an earlier, faster one). */
+  ms: number;
+  improved: boolean;
+  rank: number;
+  total: number;
+}
+
+export const dailyApi = {
+  get: () => request<DailyPuzzleDTO>("/api/daily", { cache: "no-store" }),
+  start: (clientId: string, day: string) =>
+    request<{ day: string; startedAt: number }>("/api/daily/start", {
+      method: "POST",
+      body: JSON.stringify({ clientId, day }),
+    }),
+  submit: (input: {
+    clientId: string;
+    name: string;
+    color: string;
+    avatar: string;
+    ms: number;
+    day: string;
+  }) =>
+    request<DailySubmitDTO>("/api/daily/result", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  leaderboard: (day: string, clientId?: string) =>
+    request<DailyLeaderboardDTO>(
+      `/api/daily/leaderboard?day=${encodeURIComponent(day)}${
+        clientId ? `&clientId=${encodeURIComponent(clientId)}` : ""
+      }`,
+      { cache: "no-store" },
+    ),
+};
