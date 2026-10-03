@@ -48,7 +48,10 @@ export const api = {
     }),
   getRoom: (id: string) => request<RoomPreview>(`/api/rooms/${encodeURIComponent(id)}`),
   findRoomByCode: (code: string) =>
-    request<{ id: string }>(`/api/rooms/code/${encodeURIComponent(code)}`),
+    // `game` is missing on servers from before mafia tables had codes: those are puzzle rooms.
+    request<{ id: string; game?: "puzzle" | "mafia" }>(
+      `/api/rooms/code/${encodeURIComponent(code)}`,
+    ),
   gallery: (category?: string) =>
     request<{ categories: string[]; items: GalleryItem[] }>(
       `/api/gallery${category ? `?category=${encodeURIComponent(category)}` : ""}`,

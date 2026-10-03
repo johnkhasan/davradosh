@@ -94,6 +94,8 @@ export type MafiaRoomStatus = "lobby" | "playing";
 
 export interface MafiaRoomStateDTO {
   id: string;
+  /** 4-digit join code; null for tables created before codes existed. */
+  code: string | null;
   status: MafiaRoomStatus;
   /** Players needed at this table (6–12, 10 is official). */
   tableSize: number;

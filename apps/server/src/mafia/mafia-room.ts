@@ -46,6 +46,8 @@ export type MafiaJoinResult =
 export class MafiaRoom {
   readonly id: string;
   readonly tableSize: number;
+  /** 4-digit join code; null for tables created before codes existed. */
+  readonly code: string | null;
   private hostId: string;
   private status: MafiaRoomStatus;
   private readonly members = new Map<string, Member>();
@@ -69,6 +71,7 @@ export class MafiaRoom {
     this.lobbyGraceMs = options.lobbyGraceMs ?? MAFIA_LOBBY_GRACE_MS;
     const now = this.now();
     this.id = record.id;
+    this.code = record.code ?? null;
     this.tableSize = record.tableSize;
     this.hostId = record.hostId;
     this.status = record.status;
@@ -375,6 +378,7 @@ export class MafiaRoom {
     );
     return {
       id: this.id,
+      code: this.code,
       status: this.status,
       tableSize: this.tableSize,
       members: members.map((m): MafiaMemberDTO => ({
@@ -431,6 +435,7 @@ export class MafiaRoom {
   get summary() {
     return {
       id: this.id,
+      code: this.code,
       status: this.status,
       tableSize: this.tableSize,
       players: this.seated().length,

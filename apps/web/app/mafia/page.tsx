@@ -83,6 +83,12 @@ export default function MafiaPage() {
             <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row md:justify-start">
               <CreateTableButton />
               <Link
+                href="/join"
+                className="rounded-control border border-border bg-surface px-6 py-3 text-center font-medium shadow-soft-sm transition-colors hover:bg-surface-muted"
+              >
+                Kod bilan qo&apos;shilish
+              </Link>
+              <Link
                 href="/mafia/qoidalar"
                 className="rounded-control border border-border bg-surface px-6 py-3 text-center font-medium shadow-soft-sm transition-colors hover:bg-surface-muted"
               >

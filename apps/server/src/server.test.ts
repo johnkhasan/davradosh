@@ -123,8 +123,22 @@ describe("game server over Socket.IO", () => {
     const { code } = (await (await fetch(`${url}/api/rooms/${id}`)).json()) as { code: string };
     expect(code).toMatch(/^\d{4}$/);
     const res = await fetch(`${url}/api/rooms/code/${code}`);
-    expect(await res.json()).toEqual({ id });
+    expect(await res.json()).toEqual({ id, game: "puzzle" });
     expect((await fetch(`${url}/api/rooms/code/12a4`)).status).toBe(404);
+  });
+
+  it("finds a mafia table by its join code", async () => {
+    const res = await fetch(`${url}/api/mafia/rooms`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ clientId: "mafia_code_host_0001" }),
+    });
+    const { id, code } = (await res.json()) as { id: string; code: string };
+    expect(code).toMatch(/^\d{4}$/);
+    const found = await fetch(`${url}/api/rooms/code/${code}`);
+    expect(await found.json()).toEqual({ id, game: "mafia" });
+    const preview = await fetch(`${url}/api/mafia/rooms/${id}`);
+    expect(await preview.json()).toMatchObject({ id, code });
   });
 
   it("rejects invalid room creation", async () => {

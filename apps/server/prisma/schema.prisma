@@ -68,6 +68,8 @@ enum MafiaStatus {
 model MafiaRoom {
   /// nanoid(8), used in the share link: /mafia/{id}
   id        String      @id
+  /// 4-digit join code, shared with puzzle rooms; null when none was free
+  code      String?     @unique
   /// Public player id of the current host
   hostId    String
   /// Players at the table: 6–12, 10 is the official game

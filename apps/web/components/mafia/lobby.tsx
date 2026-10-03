@@ -22,7 +22,7 @@ export function MafiaLobby({
   voice: MafiaVoiceHandle;
 }) {
   const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<"link" | "code" | null>(null);
   const [managed, setManaged] = useState<MafiaMemberDTO | null>(null);
   const me = state.members.find((m) => m.id === state.you);
   const seated = state.members.filter((m) => !m.spectator);
@@ -38,15 +38,18 @@ export function MafiaLobby({
     if (!result.ok) setError(errorText(result.error ?? ""));
   };
 
-  const copy = async () => {
+  const copy = async (what: "link" | "code") => {
     try {
-      await navigator.clipboard.writeText(link);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1500);
+      await navigator.clipboard.writeText(what === "code" ? (state.code ?? "") : link);
+      setCopied(what);
+      window.setTimeout(() => setCopied(null), 1500);
     } catch {
-      setError("Havolani nusxalab bo'lmadi");
+      setError(what === "code" ? "Kodni nusxalab bo'lmadi" : "Havolani nusxalab bo'lmadi");
     }
   };
+  const shareText = state.code
+    ? `Mafia o'ynaymizmi? Stol kodi: ${state.code}. Yoki havola orqali qo'shil:`
+    : "Mafia o'ynaymizmi? Stolga qo'shil:";
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-3xl flex-col px-4 py-6">
@@ -73,25 +76,52 @@ export function MafiaLobby({
 
       <h1 className="mt-8 font-display text-3xl font-bold">Stol yig&apos;ilmoqda</h1>
       <p className="mt-2 text-muted">
-        {state.tableSize} kishilik stol: {castText(state.tableSize)}. Havolani do&apos;stlaringizga
-        yuboring.
+        {state.tableSize} kishilik stol: {castText(state.tableSize)}.{" "}
+        {state.code
+          ? "Kodni yoki havolani do'stlaringizga yuboring."
+          : "Havolani do'stlaringizga yuboring."}
       </p>
 
-      <div className="mt-5 flex flex-col gap-2 sm:flex-row">
+      {state.code && (
         <button
           type="button"
-          onClick={() => void copy()}
+          onClick={() => void copy("code")}
+          title="Nusxalash"
+          aria-label={copied === "code" ? "Kod nusxalandi" : `Stol kodi ${state.code}, nusxalash`}
+          className="mt-5 flex w-full items-center justify-between gap-4 rounded-card border border-border bg-surface px-5 py-4 text-left shadow-soft-sm transition-colors hover:bg-surface-muted focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+        >
+          <span>
+            <span className="block text-sm font-medium">Stol kodi</span>
+            <span className="block text-xs text-muted">
+              davradosh.uz/join sahifasida kiritiladi
+            </span>
+          </span>
+          <span className="flex items-center gap-2 font-mono text-3xl font-bold tracking-[0.3em] tabular-nums">
+            {state.code}
+            {copied === "code" ? (
+              <Check className="size-5 text-success" aria-hidden />
+            ) : (
+              <Copy className="size-5 text-muted" aria-hidden />
+            )}
+          </span>
+        </button>
+      )}
+
+      <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+        <button
+          type="button"
+          onClick={() => void copy("link")}
           className="flex flex-1 items-center justify-center gap-2 rounded-control border border-border bg-surface px-4 py-2.5 font-medium shadow-soft-sm hover:bg-surface-muted"
         >
-          {copied ? (
+          {copied === "link" ? (
             <Check className="size-4" aria-hidden />
           ) : (
             <Copy className="size-4" aria-hidden />
           )}
-          {copied ? "Nusxalandi" : "Havolani nusxalash"}
+          {copied === "link" ? "Nusxalandi" : "Havolani nusxalash"}
         </button>
         <a
-          href={`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent("Mafia o'ynaymizmi? Stolga qo'shil:")}`}
+          href={`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(shareText)}`}
           target="_blank"
           rel="noreferrer"
           className="flex flex-1 items-center justify-center gap-2 rounded-control bg-[#229ED9] px-4 py-2.5 font-medium text-white shadow-soft-sm hover:opacity-90"

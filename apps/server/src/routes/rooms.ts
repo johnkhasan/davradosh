@@ -2,7 +2,14 @@ import { CreateRoomSchema, RoomCodeSchema, RoomIdSchema } from "@puzzle/shared";
 import type { FastifyInstance } from "fastify";
 import type { RoomManager } from "../rooms/room-manager";
 
-export async function roomRoutes(app: FastifyInstance, opts: { manager: RoomManager }) {
+export async function roomRoutes(
+  app: FastifyInstance,
+  opts: {
+    manager: RoomManager;
+    /** Mafia tables share the join codes with puzzle rooms. */
+    findMafiaByCode?: (code: string) => Promise<string | null>;
+  },
+) {
   app.post("/api/rooms", async (request, reply) => {
     const parsed = CreateRoomSchema.safeParse(request.body);
     if (!parsed.success)
@@ -22,8 +29,10 @@ export async function roomRoutes(app: FastifyInstance, opts: { manager: RoomMana
       const code = RoomCodeSchema.safeParse(request.params.code);
       if (!code.success) return reply.code(404).send({ error: "not_found" });
       const id = await opts.manager.findByCode(code.data);
-      if (!id) return reply.code(404).send({ error: "not_found" });
-      return { id };
+      if (id) return { id, game: "puzzle" };
+      const mafia = await opts.findMafiaByCode?.(code.data);
+      if (mafia) return { id: mafia, game: "mafia" };
+      return reply.code(404).send({ error: "not_found" });
     },
   );
 

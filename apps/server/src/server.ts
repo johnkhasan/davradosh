@@ -78,6 +78,7 @@ export async function createGameServer({
     createEmitter: (roomId) => createRoomEmitter(io, roomId),
     logger: app.log,
     maxPlayersPerRoom: env.MAX_PLAYERS_PER_ROOM,
+    codeTaken: async (code) => (await mafiaRepository.findRoomIdByCode(code, new Date())) !== null,
   });
 
   const uploadDir = path.resolve(env.UPLOAD_DIR);
@@ -100,7 +101,10 @@ export async function createGameServer({
         })
       : null;
 
-  await app.register(roomRoutes, { manager });
+  await app.register(roomRoutes, {
+    manager,
+    findMafiaByCode: (code) => mafiaRepository.findRoomIdByCode(code, new Date()),
+  });
   await app.register(voiceRoutes, { manager, voice });
   await app.register(imageRoutes, { store, repository, gallery });
   if (env.SERVE_UPLOADS ?? env.NODE_ENV !== "production") {
@@ -121,6 +125,7 @@ export async function createGameServer({
   const mafia = new MafiaRoomManager({
     voice: mafiaVoice,
     repository: mafiaRepository,
+    codeTaken: async (code) => (await repository.findRoomIdByCode(code, new Date())) !== null,
     createEmitter: () => createMafiaEmitter(mafiaNsp),
     logger: app.log,
     game: mafiaOptions?.game,

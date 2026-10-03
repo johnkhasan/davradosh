@@ -1,6 +1,7 @@
 import type { MafiaRoomStatus } from "@puzzle/shared/mafia";
 import type { Db } from "../db";
 import { Prisma } from "../generated/prisma/client";
+import { RoomCodeTakenError } from "../rooms/repository";
 import type { MafiaGameSnapshot } from "./game";
 
 /** A room member as stored (no socket data). */
@@ -16,6 +17,8 @@ export interface MafiaMemberRecord {
 
 export interface MafiaRoomRecord {
   id: string;
+  /** 4-digit join code (puzzle and mafia rooms share the codes); null when none was free. */
+  code?: string | null;
   hostId: string;
   /** Players at the table, chosen at creation (6–12, 10 is official). */
   tableSize: number;
@@ -28,7 +31,13 @@ export interface MafiaRoomRecord {
   expiresAt: Date;
 }
 
-export type NewMafiaRoom = { id: string; hostId: string; tableSize: number; expiresAt: Date };
+export type NewMafiaRoom = {
+  id: string;
+  code?: string | null;
+  hostId: string;
+  tableSize: number;
+  expiresAt: Date;
+};
 
 export type MafiaRoomUpdate = Pick<
   MafiaRoomRecord,
@@ -38,6 +47,8 @@ export type MafiaRoomUpdate = Pick<
 export interface MafiaRepository {
   createRoom(room: NewMafiaRoom): Promise<MafiaRoomRecord>;
   loadRoom(id: string): Promise<MafiaRoomRecord | null>;
+  /** Id of the unexpired room with this join code. */
+  findRoomIdByCode(code: string, now: Date): Promise<string | null>;
   saveRoom(id: string, update: MafiaRoomUpdate): Promise<void>;
   deleteExpiredRooms(now: Date): Promise<number>;
 }
@@ -47,6 +58,14 @@ export class MemoryMafiaRepository implements MafiaRepository {
   private readonly rooms = new Map<string, MafiaRoomRecord>();
 
   async createRoom(room: NewMafiaRoom) {
+    if (room.code) {
+      for (const other of this.rooms.values()) {
+        if (other.code !== room.code) continue;
+        // An expired room gives its code up, like the Prisma repository does.
+        if (other.expiresAt > new Date()) throw new RoomCodeTakenError(room.code);
+        other.code = null;
+      }
+    }
     const record: MafiaRoomRecord = {
       ...room,
       status: "lobby",
@@ -62,6 +81,12 @@ export class MemoryMafiaRepository implements MafiaRepository {
   async loadRoom(id: string) {
     const record = this.rooms.get(id);
     return record ? structuredClone(record) : null;
+  }
+
+  async findRoomIdByCode(code: string, now: Date) {
+    for (const room of this.rooms.values())
+      if (room.code === code && room.expiresAt > now) return room.id;
+    return null;
   }
 
   async saveRoom(id: string, update: MafiaRoomUpdate) {
@@ -87,8 +112,32 @@ export class PrismaMafiaRepository implements MafiaRepository {
   constructor(private readonly db: Db) {}
 
   async createRoom(room: NewMafiaRoom) {
-    const row = await this.db.mafiaRoom.create({ data: room });
-    return this.toRecord(row);
+    // Expired rooms waiting for the hourly cleanup give their code up.
+    if (room.code)
+      await this.db.mafiaRoom.updateMany({
+        where: { code: room.code, expiresAt: { lte: new Date() } },
+        data: { code: null },
+      });
+    try {
+      const row = await this.db.mafiaRoom.create({ data: room });
+      return this.toRecord(row);
+    } catch (error) {
+      if (
+        room.code &&
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      )
+        throw new RoomCodeTakenError(room.code);
+      throw error;
+    }
+  }
+
+  async findRoomIdByCode(code: string, now: Date) {
+    const row = await this.db.mafiaRoom.findFirst({
+      where: { code, expiresAt: { gt: now } },
+      select: { id: true },
+    });
+    return row?.id ?? null;
   }
 
   async loadRoom(id: string) {
@@ -117,6 +166,7 @@ export class PrismaMafiaRepository implements MafiaRepository {
 
   private toRecord(row: {
     id: string;
+    code: string | null;
     hostId: string;
     tableSize: number;
     status: "LOBBY" | "PLAYING";
@@ -128,6 +178,7 @@ export class PrismaMafiaRepository implements MafiaRepository {
   }): MafiaRoomRecord {
     return {
       id: row.id,
+      code: row.code,
       hostId: row.hostId,
       tableSize: row.tableSize,
       status: row.status === "PLAYING" ? "playing" : "lobby",

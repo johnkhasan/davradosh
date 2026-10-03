@@ -11,6 +11,8 @@ export interface RoomManagerOptions {
   createEmitter: (roomId: string) => RoomEmitter;
   logger: FastifyBaseLogger;
   maxPlayersPerRoom: number;
+  /** Whether a join code is in use elsewhere (mafia rooms share the codes). */
+  codeTaken?: (code: string) => Promise<boolean>;
   /** Periodic persistence of changed rooms. */
   saveIntervalMs?: number;
   /** Rooms without connected players are unloaded after this long. */
@@ -30,7 +32,12 @@ export class RoomManager {
   private cleanupTimer: NodeJS.Timeout | null = null;
 
   constructor(options: RoomManagerOptions) {
-    this.opts = { saveIntervalMs: 10_000, idleUnloadMs: 10 * 60_000, ...options };
+    this.opts = {
+      saveIntervalMs: 10_000,
+      idleUnloadMs: 10 * 60_000,
+      codeTaken: async () => false,
+      ...options,
+    };
   }
 
   start() {
@@ -82,6 +89,7 @@ export class RoomManager {
     // Only 10 000 codes exist: after a few collisions the room goes without one (link only).
     for (let attempt = 0; attempt < 8; attempt++) {
       const code = randomCode();
+      if (await this.opts.codeTaken(code)) continue;
       try {
         return await this.opts.repository.createRoom({ ...room, code });
       } catch (error) {

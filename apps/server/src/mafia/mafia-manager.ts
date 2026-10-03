@@ -1,6 +1,7 @@
 import { MAFIA_PLAYERS } from "@puzzle/shared/mafia";
 import type { FastifyBaseLogger } from "fastify";
-import { publicPlayerId, randomId } from "../lib/ids";
+import { publicPlayerId, randomCode, randomId } from "../lib/ids";
+import { RoomCodeTakenError } from "../rooms/repository";
 import type { MafiaGameOptions } from "./game";
 import { MafiaRoom, type MafiaRoomEmitter, type MafiaRoomOptions } from "./mafia-room";
 import type { MafiaRepository } from "./repository";
@@ -18,6 +19,8 @@ export interface MafiaManagerOptions {
   room?: Omit<MafiaRoomOptions, "game" | "now">;
   /** Applies the voice policy to LiveKit; absent when voice is not configured. */
   voice?: MafiaVoiceSync | null;
+  /** Whether a join code is in use elsewhere (puzzle rooms share the codes). */
+  codeTaken?: (code: string) => Promise<boolean>;
   now?: () => number;
   /** How often phase timers are checked. */
   tickMs?: number;
@@ -60,14 +63,35 @@ export class MafiaRoomManager {
     await this.saveDirty();
   }
 
-  async create(clientId: string, tableSize: number = MAFIA_PLAYERS): Promise<string> {
-    const room = await this.opts.repository.createRoom({
+  async create(
+    clientId: string,
+    tableSize: number = MAFIA_PLAYERS,
+  ): Promise<{ id: string; code: string | null }> {
+    const room = {
       id: randomId(8),
       hostId: publicPlayerId(clientId),
       tableSize,
       expiresAt: new Date(this.now() + MAFIA_ROOM_TTL_MS),
-    });
-    return room.id;
+    };
+    // Only 10 000 codes exist: after a few collisions the room goes without one (link only).
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const code = randomCode();
+      if (await this.opts.codeTaken?.(code)) continue;
+      try {
+        await this.opts.repository.createRoom({ ...room, code });
+        return { id: room.id, code };
+      } catch (error) {
+        if (!(error instanceof RoomCodeTakenError)) throw error;
+      }
+    }
+    this.opts.logger.warn("no free room code, creating a mafia room without one");
+    await this.opts.repository.createRoom({ ...room, code: null });
+    return { id: room.id, code: null };
+  }
+
+  /** Room id for a 4-digit join code. */
+  findByCode(code: string): Promise<string | null> {
+    return this.opts.repository.findRoomIdByCode(code, new Date(this.now()));
   }
 
   /** The live room, loading it from storage on first access. */
@@ -91,6 +115,7 @@ export class MafiaRoomManager {
     const players = record.members.filter((m) => !m.spectator).length;
     return {
       id: record.id,
+      code: record.code ?? null,
       status: record.status,
       tableSize: record.tableSize,
       players,

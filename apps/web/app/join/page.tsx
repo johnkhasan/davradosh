@@ -3,7 +3,8 @@ import { JoinByCode } from "@/components/landing/join-by-code";
 
 export const metadata: Metadata = {
   title: "Xonaga qo'shilish",
-  description: "Do'stingiz yuborgan 4 xonali kod bilan puzzle xonasiga qo'shiling.",
+  description:
+    "Do'stingiz yuborgan 4 xonali kod bilan puzzle xonasiga yoki mafia stoliga qo'shiling.",
   alternates: { canonical: "/join" },
 };
 

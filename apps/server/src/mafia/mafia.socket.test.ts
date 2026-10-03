@@ -172,6 +172,7 @@ describe("mafia over Socket.IO", () => {
     const info = await (await fetch(`${url}/api/mafia/rooms/${roomId}`)).json();
     expect(info).toEqual({
       id: roomId,
+      code: expect.stringMatching(/^\d{4}$/),
       status: "playing",
       tableSize: 10,
       players: 10,

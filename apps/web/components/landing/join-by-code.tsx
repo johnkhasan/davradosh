@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useId, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 
-/** Joins a room by the 4-digit code shown next to the invite button. */
+/** Joins a puzzle room or a mafia table by the 4-digit code shown next to the invite button. */
 export function JoinByCode({ initialCode = "" }: { initialCode?: string }) {
   const router = useRouter();
   const id = useId();
@@ -19,8 +19,8 @@ export function JoinByCode({ initialCode = "" }: { initialCode?: string }) {
     setPending(true);
     setError(null);
     try {
-      const { id } = await api.findRoomByCode(value);
-      router.push(`/room/${id}`);
+      const { id, game } = await api.findRoomByCode(value);
+      router.push(game === "mafia" ? `/mafia/${id}` : `/room/${id}`);
     } catch (e) {
       setPending(false);
       if (e instanceof ApiError && e.status === 404) setError("Bunday kodli xona topilmadi");
@@ -55,7 +55,7 @@ export function JoinByCode({ initialCode = "" }: { initialCode?: string }) {
           <X className="size-5" aria-hidden />
         </Link>
         <span className="text-4xl" aria-hidden>
-          🧩
+          🎲
         </span>
         <h1 id={`${id}-title`} className="mt-3 font-display text-2xl font-bold">
           Xonaga qo&apos;shilish
@@ -102,7 +102,7 @@ export function JoinByCode({ initialCode = "" }: { initialCode?: string }) {
         </button>
         <p className="mt-5 text-sm text-muted">
           Kodingiz yo&apos;qmi?{" "}
-          <Link href="/create" className="font-medium text-primary hover:underline">
+          <Link href="/" className="font-medium text-primary hover:underline">
             O&apos;zingiz yarating
           </Link>
         </p>
