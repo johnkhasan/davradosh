@@ -80,19 +80,13 @@ export default function MafiaPage() {
               Fazalarni, so&apos;z navbatini va ovoz berishni server o&apos;zi yuritadi, siz faqat
               o&apos;ynaysiz.
             </p>
-            <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row md:justify-start">
+            <div className="mt-8 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-center md:justify-start">
               <CreateTableButton />
               <Link
                 href="/join"
-                className="rounded-control border border-border bg-surface px-6 py-3 text-center font-medium shadow-soft-sm transition-colors hover:bg-surface-muted"
+                className="inline-flex items-center justify-center rounded-control border border-border bg-surface px-7 py-3.5 text-lg font-semibold whitespace-nowrap shadow-soft-sm transition-colors hover:bg-surface-muted"
               >
                 Kod bilan qo&apos;shilish
-              </Link>
-              <Link
-                href="/mafia/qoidalar"
-                className="rounded-control border border-border bg-surface px-6 py-3 text-center font-medium shadow-soft-sm transition-colors hover:bg-surface-muted"
-              >
-                O&apos;yin qoidalari
               </Link>
             </div>
           </div>

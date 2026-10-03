@@ -54,7 +54,7 @@ export function CreateTableButton() {
         type="button"
         disabled={busy}
         onClick={() => setStep("size")}
-        className="inline-flex items-center justify-center gap-2 rounded-control bg-primary px-7 py-3.5 text-lg font-semibold text-primary-foreground shadow-soft-lg transition-transform hover:-translate-y-0.5 disabled:opacity-60"
+        className="inline-flex items-center justify-center gap-2 rounded-control border border-transparent bg-primary px-7 py-3.5 text-lg font-semibold whitespace-nowrap text-primary-foreground shadow-soft-lg transition-transform hover:-translate-y-0.5 disabled:opacity-60"
       >
         {busy && <Loader2 className="size-5 animate-spin" aria-hidden />}
         Stol yaratish
